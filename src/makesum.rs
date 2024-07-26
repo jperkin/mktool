@@ -14,11 +14,16 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+use blake2::{Blake2s256, Digest};
 use clap::Args;
-use std::path::{Path, PathBuf};
+use ripemd::Ripemd160;
+use sha1::Sha1;
+use sha2::{Sha256, Sha512};
+use std::fmt::Write;
+use std::fs;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
-
+use std::path::{Path, PathBuf};
 
 #[derive(Args, Debug)]
 pub struct MakeSum {
@@ -52,7 +57,7 @@ pub struct MakeSum {
 
     #[arg(value_name = "patch")]
     #[arg(help = "Alphabetical list of named patch files")]
-    patches: Vec<PathBuf>,
+    patchfiles: Vec<PathBuf>,
 }
 
 impl MakeSum {
@@ -99,7 +104,51 @@ impl MakeSum {
                 }
             }
         }
-        dbg!(&distfiles);
+        for d in &distfiles {
+            for a in &self.dalgorithms {
+                let mut file = fs::File::open(d)?;
+                let h = match a.as_str() {
+                    "BLAKE2s" => self.hash_file::<Blake2s256>(&mut file),
+                    "RMD160" => self.hash_file::<Ripemd160>(&mut file),
+                    "SHA1" => self.hash_file::<Sha1>(&mut file),
+                    "SHA256" => self.hash_file::<Sha256>(&mut file),
+                    "SHA512" => self.hash_file::<Sha512>(&mut file),
+                    _ => unimplemented!("unsupported algorithm: {}", a),
+                };
+                println!(
+                    "{} ({}) = {}",
+                    a,
+                    d.strip_prefix(&self.distdir)?.display(),
+                    h
+                );
+            }
+        }
+        for p in &self.patchfiles {
+            for a in &self.palgorithms {
+                let mut file = fs::File::open(p)?;
+                let h = match a.as_str() {
+                    "BLAKE2s" => self.hash_file::<Blake2s256>(&mut file),
+                    "RMD160" => self.hash_file::<Ripemd160>(&mut file),
+                    "SHA1" => self.hash_file::<Sha1>(&mut file),
+                    "SHA256" => self.hash_file::<Sha256>(&mut file),
+                    "SHA512" => self.hash_file::<Sha512>(&mut file),
+                    _ => unimplemented!("unsupported algorithm: {}", a),
+                };
+                println!("{} ({}) = {}", a, p.display(), h);
+            }
+        }
         Ok(())
+    }
+
+    fn hash_file<D: Digest + std::io::Write>(&self, file: &mut File) -> String {
+        let mut hasher = D::new();
+        let _ = io::copy(file, &mut hasher);
+        hasher
+            .finalize()
+            .iter()
+            .fold(String::new(), |mut output, b| {
+                let _ = write!(output, "{b:02x}");
+                output
+            })
     }
 }
