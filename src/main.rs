@@ -36,7 +36,7 @@ enum Commands {
     MakeSum(makesum::MakeSum),
 }
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
     match &cli.command {

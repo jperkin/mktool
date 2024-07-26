@@ -15,7 +15,10 @@
  */
 
 use clap::Args;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::fs::File;
+use std::io::{self, BufRead, BufReader};
+
 
 #[derive(Args, Debug)]
 pub struct MakeSum {
@@ -27,9 +30,9 @@ pub struct MakeSum {
     #[arg(help = "Generate digest for each named distfile")]
     cksumfile: Vec<PathBuf>,
 
-    #[arg(short, value_name = "distdir")]
+    #[arg(short, value_name = "distdir", default_value = ".")]
     #[arg(help = "Directory under which distfiles are found")]
-    distdir: Option<PathBuf>,
+    distdir: PathBuf,
 
     #[arg(short = 'f', value_name = "distinfo")]
     #[arg(help = "Path to an existing distinfo file")]
@@ -53,7 +56,50 @@ pub struct MakeSum {
 }
 
 impl MakeSum {
-    pub fn run(&self) {
-        dbg!(self);
+    pub fn run(&self) -> Result<(), Box<dyn std::error::Error>> {
+        /*
+         * Create list of distfiles.  In reality the user will choose either
+         * the -c option to specify each individually, or -I to read from a
+         * file, but we support both simultaneously because why not.
+         */
+        let mut distfiles: Vec<PathBuf> = vec![];
+        for f in &self.cksumfile {
+            /*
+             * Only add distfiles that exist, and silently skip those that
+             * don't, to match distinfo.awk behaviour.
+             */
+            let mut d = PathBuf::from(&self.distdir);
+            d.push(f);
+            if d.exists() {
+                distfiles.push(d);
+            }
+        }
+        if let Some(infile) = &self.input {
+            if infile == Path::new("-") {
+                let f = io::stdin();
+                let r = f.lock();
+                for line in r.lines() {
+                    let line = line?;
+                    let mut d = PathBuf::from(&self.distdir);
+                    d.push(line);
+                    if d.exists() {
+                        distfiles.push(d);
+                    }
+                }
+            } else {
+                let f = File::open(infile)?;
+                let r = BufReader::new(f);
+                for line in r.lines() {
+                    let line = line?;
+                    let mut d = PathBuf::from(&self.distdir);
+                    d.push(line);
+                    if d.exists() {
+                        distfiles.push(d);
+                    }
+                }
+            }
+        }
+        dbg!(&distfiles);
+        Ok(())
     }
 }
