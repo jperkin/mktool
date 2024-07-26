@@ -22,7 +22,7 @@ use sha2::{Sha256, Sha512};
 use std::fmt::Write;
 use std::fs;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader};
+use std::io::{self, BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 
 #[derive(Args, Debug)]
@@ -105,6 +105,9 @@ impl MakeSum {
             }
         }
         for d in &distfiles {
+            if !d.exists() {
+                continue;
+            }
             for a in &self.dalgorithms {
                 let mut file = fs::File::open(d)?;
                 let h = match a.as_str() {
@@ -124,17 +127,25 @@ impl MakeSum {
             }
         }
         for p in &self.patchfiles {
+            if !p.exists() {
+                continue;
+            }
             for a in &self.palgorithms {
                 let mut file = fs::File::open(p)?;
                 let h = match a.as_str() {
-                    "BLAKE2s" => self.hash_file::<Blake2s256>(&mut file),
-                    "RMD160" => self.hash_file::<Ripemd160>(&mut file),
-                    "SHA1" => self.hash_file::<Sha1>(&mut file),
-                    "SHA256" => self.hash_file::<Sha256>(&mut file),
-                    "SHA512" => self.hash_file::<Sha512>(&mut file),
+                    "BLAKE2s" => self.hash_patch::<Blake2s256>(&mut file),
+                    "RMD160" => self.hash_patch::<Ripemd160>(&mut file),
+                    "SHA1" => self.hash_patch::<Sha1>(&mut file),
+                    "SHA256" => self.hash_patch::<Sha256>(&mut file),
+                    "SHA512" => self.hash_patch::<Sha512>(&mut file),
                     _ => unimplemented!("unsupported algorithm: {}", a),
                 };
-                println!("{} ({}) = {}", a, p.display(), h);
+                println!(
+                    "{} ({}) = {}",
+                    a,
+                    p.file_name().expect("").to_str().expect(""),
+                    h?
+                );
             }
         }
         Ok(())
@@ -150,5 +161,28 @@ impl MakeSum {
                 let _ = write!(output, "{b:02x}");
                 output
             })
+    }
+
+    fn hash_patch<D: Digest + std::io::Write>(
+        &self,
+        file: &mut File,
+    ) -> Result<String, Box<dyn std::error::Error>> {
+        let mut hasher = D::new();
+
+        let mut r = BufReader::new(file);
+        let mut s = String::new();
+        r.read_to_string(&mut s)?;
+
+        for line in s.split_inclusive('\n') {
+            if line.contains("$NetBSD") {
+                continue;
+            }
+            hasher.update(line.as_bytes());
+        }
+        let hash = hasher.finalize();
+        Ok(hash.iter().fold(String::new(), |mut output, b| {
+            let _ = write!(output, "{b:02x}");
+            output
+        }))
     }
 }
