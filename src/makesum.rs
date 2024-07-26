@@ -125,6 +125,11 @@ impl MakeSum {
                     h
                 );
             }
+            let file = fs::File::open(d)?;
+            let m = file.metadata()?;
+            println!("Size ({}) = {} bytes",
+                    d.strip_prefix(&self.distdir)?.display(),
+                    m.len());
         }
         for p in &self.patchfiles {
             if !p.exists() {
