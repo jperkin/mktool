@@ -14,8 +14,9 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+mod makesum;
+
 use clap::{Parser, Subcommand};
-use std::path::PathBuf;
 
 #[derive(Debug, Parser)]
 #[command(author, version, about, long_about = None)]
@@ -32,42 +33,13 @@ pub struct Cli {
 #[command(rename_all = "lower")]
 enum Commands {
     /// Create or update distinfo file
-    MakeSum {
-        #[arg(short = 'a', value_name = "algorithm")]
-        #[arg(help = "Algorithm digests to create for each distfile")]
-        dalgorithms: Vec<String>,
-
-        #[arg(short, value_name = "distfile")]
-        #[arg(help = "Generate digest for each named distfile")]
-        cksumfile: Vec<PathBuf>,
-
-        #[arg(short, value_name = "distdir")]
-        #[arg(help = "Directory under which distfiles are found")]
-        distdir: Option<PathBuf>,
-
-        #[arg(short = 'f', value_name = "distinfo")]
-        #[arg(help = "Path to an existing distinfo file")]
-        distinfo: Option<PathBuf>,
-
-        #[arg(short = 'I', value_name = "input")]
-        #[arg(help = "Read distfiles from input instead of -c")]
-        input: Option<PathBuf>,
-
-        #[arg(short, value_name = "ignorefile")]
-        #[arg(help = "List of distfiles to ignore (unused)")]
-        ignorefile: Option<PathBuf>,
-
-        #[arg(short = 'p', value_name = "algorithm")]
-        #[arg(help = "Algorithm digests to create for each patchfile")]
-        palgorithms: Vec<String>,
-
-        #[arg(value_name = "patch")]
-        #[arg(help = "Alphabetical list of named patch files")]
-        patches: Vec<PathBuf>,
-    }
+    MakeSum(makesum::MakeSum),
 }
 
 fn main() {
-    let args = Cli::parse();
-    dbg!(&args);
+    let cli = Cli::parse();
+
+    match &cli.command {
+        Commands::MakeSum(cmd) => cmd.run(),
+    }
 }
