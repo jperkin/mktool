@@ -4,8 +4,5 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-blake2 = "*"
 clap = { version = "4", features = ["derive"] }
-ripemd = "*"
-sha1 = "*"
-sha2 = "*"
+pkgsrc = "0.1.17"

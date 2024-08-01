@@ -14,16 +14,14 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-use blake2::{Blake2s256, Digest};
 use clap::Args;
-use ripemd::Ripemd160;
-use sha1::Sha1;
-use sha2::{Sha256, Sha512};
-use std::fmt::Write;
+use pkgsrc::digest::Digest;
+use std::collections::HashMap;
 use std::fs;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, Read};
+use std::io::{self, BufRead, BufReader};
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 #[derive(Args, Debug)]
 pub struct MakeSum {
@@ -60,38 +58,11 @@ pub struct MakeSum {
     patchfiles: Vec<PathBuf>,
 }
 
-fn hash_file<D: Digest + std::io::Write>(file: &mut File) -> String {
-    let mut hasher = D::new();
-    let _ = io::copy(file, &mut hasher);
-    hasher
-        .finalize()
-        .iter()
-        .fold(String::new(), |mut output, b| {
-            let _ = write!(output, "{b:02x}");
-            output
-        })
-}
-
-fn hash_patch<D: Digest + std::io::Write>(
-    file: &mut File,
-) -> Result<String, Box<dyn std::error::Error>> {
-    let mut hasher = D::new();
-
-    let mut r = BufReader::new(file);
-    let mut s = String::new();
-    r.read_to_string(&mut s)?;
-
-    for line in s.split_inclusive('\n') {
-        if line.contains("$NetBSD") {
-            continue;
-        }
-        hasher.update(line.as_bytes());
-    }
-    let hash = hasher.finalize();
-    Ok(hash.iter().fold(String::new(), |mut output, b| {
-        let _ = write!(output, "{b:02x}");
-        output
-    }))
+#[derive(Debug, Default)]
+struct SumResult {
+    filename: PathBuf,
+    size: u64,
+    hashes: HashMap<Digest, String>,
 }
 
 impl MakeSum {
@@ -101,7 +72,7 @@ impl MakeSum {
          * the -c option to specify each individually, or -I to read from a
          * file, but we support both simultaneously because why not.
          */
-        let mut distfiles: Vec<PathBuf> = vec![];
+        let mut distfiles: Vec<SumResult> = vec![];
         for f in &self.cksumfile {
             /*
              * Only add distfiles that exist, and silently skip those that
@@ -110,7 +81,11 @@ impl MakeSum {
             let mut d = PathBuf::from(&self.distdir);
             d.push(f);
             if d.exists() {
-                distfiles.push(d);
+                let n = SumResult {
+                    filename: d,
+                    ..Default::default()
+                };
+                distfiles.push(n);
             }
         }
         if let Some(infile) = &self.input {
@@ -122,7 +97,11 @@ impl MakeSum {
                     let mut d = PathBuf::from(&self.distdir);
                     d.push(line);
                     if d.exists() {
-                        distfiles.push(d);
+                        let n = SumResult {
+                            filename: d,
+                            ..Default::default()
+                        };
+                        distfiles.push(n);
                     }
                 }
             } else {
@@ -133,59 +112,54 @@ impl MakeSum {
                     let mut d = PathBuf::from(&self.distdir);
                     d.push(line);
                     if d.exists() {
-                        distfiles.push(d);
+                        let n = SumResult {
+                            filename: d,
+                            ..Default::default()
+                        };
+                        distfiles.push(n);
                     }
                 }
             }
         }
-        for d in &distfiles {
-            if !d.exists() {
-                continue;
-            }
+        for d in &mut distfiles {
             for a in &self.dalgorithms {
-                let mut file = fs::File::open(d)?;
-                let h = match a.as_str() {
-                    "BLAKE2s" => hash_file::<Blake2s256>(&mut file),
-                    "RMD160" => hash_file::<Ripemd160>(&mut file),
-                    "SHA1" => hash_file::<Sha1>(&mut file),
-                    "SHA256" => hash_file::<Sha256>(&mut file),
-                    "SHA512" => hash_file::<Sha512>(&mut file),
-                    _ => unimplemented!("unsupported algorithm: {}", a),
-                };
+                let mut file = fs::File::open(&d.filename)?;
+                let alg = Digest::from_str(a)?;
+                let hash = alg.hash_file(&mut file)?;
+                d.hashes.insert(alg, hash);
+            }
+            let file = fs::File::open(&d.filename)?;
+            let m = file.metadata()?;
+            d.size = m.len();
+            dbg!(&d);
+        }
+        for d in distfiles {
+            let filename = d.filename.strip_prefix(&self.distdir)?;
+            for a in &self.dalgorithms {
+                let alg = Digest::from_str(a)?;
                 println!(
                     "{} ({}) = {}",
                     a,
-                    d.strip_prefix(&self.distdir)?.display(),
-                    h
+                    filename.display(),
+                    d.hashes.get(&alg).unwrap()
                 );
             }
-            let file = fs::File::open(d)?;
-            let m = file.metadata()?;
-            println!(
-                "Size ({}) = {} bytes",
-                d.strip_prefix(&self.distdir)?.display(),
-                m.len()
-            );
+            println!("Size ({}) = {} bytes", filename.display(), d.size);
         }
+
         for p in &self.patchfiles {
             if !p.exists() {
                 continue;
             }
             for a in &self.palgorithms {
                 let mut file = fs::File::open(p)?;
-                let h = match a.as_str() {
-                    "BLAKE2s" => hash_patch::<Blake2s256>(&mut file),
-                    "RMD160" => hash_patch::<Ripemd160>(&mut file),
-                    "SHA1" => hash_patch::<Sha1>(&mut file),
-                    "SHA256" => hash_patch::<Sha256>(&mut file),
-                    "SHA512" => hash_patch::<Sha512>(&mut file),
-                    _ => unimplemented!("unsupported algorithm: {}", a),
-                };
+                let d = Digest::from_str(a)?;
+                let h = d.hash_patch(&mut file)?;
                 println!(
                     "{} ({}) = {}",
                     a,
                     p.file_name().expect("").to_str().expect(""),
-                    h?
+                    h
                 );
             }
         }
