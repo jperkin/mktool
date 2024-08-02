@@ -283,13 +283,15 @@ impl MakeSum {
         }
 
         /*
-         * At this point we're done.  Write output to stdout, and return exit
-         * code based on whether there were changes or not.
+         * Write resulting distinfo file to stdout.
          */
         let mut stdout = io::stdout().lock();
         stdout.write_all(&output)?;
         stdout.flush()?;
 
+        /*
+         * Return exit code based on whether there were changes or not.
+         */
         if input == output {
             Ok(0)
         } else {
