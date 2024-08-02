@@ -1,23 +1,57 @@
-## mktool
+# mktool
 
-This is intended to be a utility that replaces parts of
+This is intended to be a collection of utilities to replace parts of
 [pkgsrc](https://github.com/NetBSD/pkgsrc/)'s mk infrastructure.
 
-As an example, the first command to be implemented, `makesum`, already improves
-the performance of generating the `distinfo` for `wip/grafana` from:
+Many targets under `mk/` are implemented using a combination of shell and
+awk, and can suffer from a lack of performance, especially when input sizes
+grow.
 
-```
-real    5m55.346s
-user    1m11.179s
-sys     3m32.786s
+For example, with the profligation of Go modules used in newer Go software,
+www/grafana now has over 5,000 distfiles.  This exposes various issues in
+the current pkgsrc `distinfo.awk` script that are hard to work around.  This
+tool implements a `makesum` command that replaces `distinfo.awk`, with the
+following performance improvement:
+
+| Implementation | Time to run `bmake distinfo` |
+|---------------:|-----------------------------:|
+|   distinfo.awk |        5 minutes, 55 seconds |
+| mktool makesum |                    9 seconds |
+
+As pkgsrc strives to be as portable as possible, at no point will any of the
+commands implemented by `mktool` become mandatory.  This tool simply exists
+for those who are able to run Rust software to dramatically improve pkgsrc
+performance.
+
+## Installation
+
+Install using `cargo`:
+
+```shell
+cargo install mktool
 ```
 
-to just:
+At some point in the future it will hopefully be possible to enable `mktool`
+by simply setting:
 
-```
-real    0m9.579s
-user    0m7.752s
-sys     0m1.759s
+```make
+TOOLS_PLATFORM.mktool=  /path/to/mktool
 ```
 
-and that's before any work on optimisation.
+in your `mk.conf`, and any supported commands will be automatically enabled.
+
+## Commands
+
+These are the commands currently implemented.
+
+### makesum
+
+A replacement for
+[pkgsrc/mk/checksum/distinfo.awk](https://github.com/NetBSD/pkgsrc/blob/trunk/mk/checksum/distinfo.awk)
+
+Performance comparison:
+
+| Implementation | Time to run `bmake distinfo` in wip/grafana |
+|---------------:|--------------------------------------------:|
+|   distinfo.awk |                       5 minutes, 55 seconds |
+| mktool makesum |                                   9 seconds |
