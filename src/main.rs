@@ -39,7 +39,9 @@ enum Commands {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
-    match &cli.command {
-        Commands::MakeSum(cmd) => cmd.run(),
-    }
+    let rv = match &cli.command {
+        Commands::MakeSum(cmd) => cmd.run()?,
+    };
+
+    std::process::exit(rv);
 }
