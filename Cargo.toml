@@ -1,6 +1,14 @@
 [package]
 name = "mktool"
+description = "General purpose utility to enhance pkgsrc/mk infrastructure"
 version = "0.1.0"
+authors = ["Jonathan Perkin <jonathan@perkin.org.uk>"]
+readme = "README.md"
+keywords = ["pkgsrc"]
+license = "ISC"
+repository = "https://github.com/jperkin/mktool"
+homepage = "https://github.com/jperkin/mktool"
+documentation = "https://docs.rs/mktool"
 edition = "2021"
 
 [dependencies]
