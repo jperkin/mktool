@@ -144,6 +144,10 @@ impl MakeSum {
          * file, but we support both simultaneously because why not.
          */
         let mut distfiles: Vec<SumResult> = vec![];
+
+        /*
+         * Add files specified by -c.
+         */
         for f in &self.cksumfile {
             /*
              * Only add distfiles that exist, and silently skip those that
@@ -159,36 +163,32 @@ impl MakeSum {
                 distfiles.push(n);
             }
         }
+
+        /*
+         * Add files passed in via -I (supporting stdin if set to "-").
+         */
         if let Some(infile) = &self.input {
-            if infile == Path::new("-") {
-                let f = io::stdin();
-                let r = f.lock();
-                for line in r.lines() {
-                    let line = line?;
-                    let mut d = PathBuf::from(&self.distdir);
-                    d.push(line);
-                    if d.exists() {
-                        let n = SumResult {
-                            filepath: d,
-                            ..Default::default()
-                        };
-                        distfiles.push(n);
-                    }
+            let reader: Box<dyn io::BufRead> = match infile.to_str() {
+                Some("-") => Box::new(io::stdin().lock()),
+                Some(f) => Box::new(BufReader::new(File::open(f)?)),
+                None => {
+                    eprintln!(
+                        "ERROR: File '{}' is not valid unicode.",
+                        infile.display()
+                    );
+                    std::process::exit(1);
                 }
-            } else {
-                let f = File::open(infile)?;
-                let r = BufReader::new(f);
-                for line in r.lines() {
-                    let line = line?;
-                    let mut d = PathBuf::from(&self.distdir);
-                    d.push(line);
-                    if d.exists() {
-                        let n = SumResult {
-                            filepath: d,
-                            ..Default::default()
-                        };
-                        distfiles.push(n);
-                    }
+            };
+            for line in reader.lines() {
+                let line = line?;
+                let mut d = PathBuf::from(&self.distdir);
+                d.push(line);
+                if d.exists() {
+                    let n = SumResult {
+                        filepath: d,
+                        ..Default::default()
+                    };
+                    distfiles.push(n);
                 }
             }
         }
