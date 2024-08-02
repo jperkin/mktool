@@ -112,7 +112,11 @@ impl MakeSum {
             match fs::read(di) {
                 Ok(s) => input = s,
                 Err(e) => {
-                    eprintln!("ERROR: Could not open distinfo '{}': {}", di.display(), e);
+                    eprintln!(
+                        "ERROR: Could not open distinfo '{}': {}",
+                        di.display(),
+                        e
+                    );
                     return Ok(128);
                 }
             }
@@ -225,7 +229,8 @@ impl MakeSum {
                 );
             }
             output.extend_from_slice(
-                format!("Size ({}) = {} bytes\n", filename.display(), d.size).as_bytes(),
+                format!("Size ({}) = {} bytes\n", filename.display(), d.size)
+                    .as_bytes(),
             );
         }
 
@@ -266,8 +271,13 @@ impl MakeSum {
             for a in &self.palgorithms {
                 let alg = Digest::from_str(a)?;
                 output.extend_from_slice(
-                    format!("{} ({}) = {}\n", a, p.filename, p.hashes.get(&alg).unwrap())
-                        .as_bytes(),
+                    format!(
+                        "{} ({}) = {}\n",
+                        a,
+                        p.filename,
+                        p.hashes.get(&alg).unwrap()
+                    )
+                    .as_bytes(),
                 );
             }
         }
