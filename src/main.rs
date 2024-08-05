@@ -14,6 +14,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+mod checksum;
 mod distinfo;
 
 use clap::{Parser, Subcommand};
@@ -32,7 +33,9 @@ pub struct Cli {
 #[derive(Debug, Subcommand)]
 #[command(rename_all = "lower")]
 enum Commands {
-    /// Create or update distinfo file
+    /// Verify checksums from a distinfo file.
+    Checksum(checksum::Checksum),
+    /// Create or update distinfo file.
     DistInfo(distinfo::DistInfo),
 }
 
@@ -40,6 +43,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
     let rv = match &cli.command {
+        Commands::Checksum(cmd) => cmd.run()?,
         Commands::DistInfo(cmd) => cmd.run()?,
     };
 
