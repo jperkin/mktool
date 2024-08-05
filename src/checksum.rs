@@ -49,12 +49,17 @@ pub struct Checksum {
     files: Vec<PathBuf>,
 }
 
+struct DistFile {
+    path: PathBuf,
+    seen: bool,
+}
+
 impl Checksum {
     pub fn run(&self) -> Result<i32, Box<dyn std::error::Error>> {
         /*
          * List of distfiles to check.
          */
-        let mut distfiles: HashMap<String, PathBuf> = HashMap::new();
+        let mut distfiles: HashMap<String, DistFile> = HashMap::new();
 
         /*
          * Iterate over files passed on the command line, optionally stripping
@@ -71,7 +76,13 @@ impl Checksum {
                 },
                 None => f,
             };
-            distfiles.insert(f.to_string(), file.clone());
+            distfiles.insert(
+                f.to_string(),
+                DistFile {
+                    path: file.clone(),
+                    seen: false,
+                },
+            );
         }
 
         /*
@@ -98,6 +109,9 @@ impl Checksum {
             }
 
             let line = line?;
+            if line.starts_with("#") {
+                continue;
+            }
 
             /*
              * All lines should be of the form "alg (file) = hash".
@@ -132,15 +146,17 @@ impl Checksum {
              * Get the full path for the file from the distfiles HashMap,
              * using the entry from distinfo as the key.
              */
-            let filepath = match distfiles.get(&distfile) {
+            let df = match distfiles.get_mut(&distfile) {
                 Some(s) => s,
                 None => continue,
             };
 
+            df.seen = true;
+
             /*
              * Calculate digest based on whether a distfile or patch.
              */
-            let mut f = fs::File::open(filepath)?;
+            let mut f = fs::File::open(&df.path)?;
             let d = Digest::from_str(algorithm)?;
             let h = match self.patchmode {
                 true => d.hash_patch(&mut f)?,
@@ -157,6 +173,18 @@ impl Checksum {
                 return Ok(1);
             }
         }
+
+        /*
+         * Verify that every distfile specified on the command line was seen
+         * when parsing distinfo.
+         */
+        for (k, v) in distfiles {
+            if !v.seen {
+                eprintln!("checksum: No Checksum recorded for {}", k);
+                return Ok(1);
+            }
+        }
+
         Ok(0)
     }
 }
