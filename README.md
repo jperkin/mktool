@@ -44,6 +44,11 @@ in your `mk.conf`, and any supported commands will be automatically enabled.
 
 These are the commands currently implemented.
 
+### checksum
+
+A replacement for
+[pkgsrc/mk/checksum/checksum.awk](https://github.com/NetBSD/pkgsrc/blob/trunk/mk/checksum/checksum.awk)
+
 ### distinfo
 
 A replacement for
