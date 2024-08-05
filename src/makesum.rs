@@ -16,12 +16,13 @@
 
 use clap::Args;
 use pkgsrc::digest::Digest;
-use std::collections::HashMap;
 use std::fs;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use std::sync::{Arc, Mutex};
+use std::thread;
 
 #[derive(Args, Debug)]
 pub struct MakeSum {
@@ -49,6 +50,10 @@ pub struct MakeSum {
     #[arg(help = "List of distfiles to ignore (unused)")]
     ignorefile: Option<PathBuf>,
 
+    #[arg(short = 'j', value_name = "jobs", default_value = "4")]
+    #[arg(help = "Number of parallel jobs to process at a time")]
+    jobs: u64,
+
     #[arg(short = 'p', value_name = "algorithm")]
     #[arg(help = "Algorithm digests to create for each patchfile")]
     palgorithms: Vec<String>,
@@ -59,26 +64,87 @@ pub struct MakeSum {
 }
 
 /**
- * [`SumResult`] contains information about a file.
+ * [`DistinfoType`] contains the type of file, as source files and patches are
+ * handled differently.
  */
-#[derive(Debug, Default)]
-struct SumResult {
+#[derive(Clone, Debug, Default, Eq, Hash, PartialEq)]
+enum DistinfoType {
     /**
-     * Full path to input file.
+     * Regular distribution file, e.g. source tarball for a package.
+     */
+    #[default]
+    Distfile,
+    /**
+     * A pkgsrc patch file that modifies the package source.
+     */
+    Patch,
+}
+
+/**
+ * [`HashEntry`] contains the [`Digest`] type and the [`String`] hash it
+ * calculated for an associated file.
+ */
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct HashEntry {
+    /**
+     * The [`Digest`] type used for this entry.
+     */
+    digest: Digest,
+    /**
+     * A [`String`] result after the digest hash has been calculated.
+     */
+    hash: String,
+}
+
+/**
+ * [`DistinfoEntry`] contains information about a file entry in the distinfo file.
+ */
+#[derive(Clone, Debug, Default)]
+struct DistinfoEntry {
+    /**
+     * Whether this is a distfile or a patch file.
+     */
+    filetype: DistinfoType,
+    /**
+     * Full path to file.
      */
     filepath: PathBuf,
-    /**
-     * String containing filename portion of filepath.
+    /*
+     * Filename for printing.  Must be valid UTF-8.
      */
     filename: String,
     /**
-     * Size of file (not used for patches).
+     * File size (not used for patches).
      */
     size: u64,
     /**
-     * Map of hashes.
+     * Computed hashes, one entry per Digest type.
      */
-    hashes: HashMap<Digest, String>,
+    hashes: Vec<HashEntry>,
+}
+
+impl DistinfoEntry {
+    fn calculate(
+        &mut self,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        for h in &mut self.hashes {
+            let mut f = fs::File::open(&self.filepath)?;
+            match self.filetype {
+                DistinfoType::Distfile => {
+                    h.hash = h.digest.hash_file(&mut f)?;
+                }
+                DistinfoType::Patch => {
+                    h.hash = h.digest.hash_patch(&mut f)?;
+                }
+            };
+        }
+        if self.filetype == DistinfoType::Distfile {
+            let f = fs::File::open(&self.filepath)?;
+            let m = f.metadata()?;
+            self.size = m.len();
+        }
+        Ok(())
+    }
 }
 
 impl MakeSum {
@@ -139,11 +205,24 @@ impl MakeSum {
         output.extend_from_slice("\n".as_bytes());
 
         /*
-         * Create list of distfiles.  In reality the user will choose either
-         * the -c option to specify each individually, or -I to read from a
-         * file, but we support both simultaneously because why not.
+         * On the first pass all of the supplied files (whether distfiles or
+         * patchfiles) are added to a Vec of DistinfoEntry's, along with the
+         * algorithms to be calculated for each.
          */
-        let mut distfiles: Vec<SumResult> = vec![];
+        let mut distinfo: Vec<DistinfoEntry> = vec![];
+
+        /*
+         * Create a hashes vec that we can clone for each distinfo entry.
+         */
+        let mut d_hashes: Vec<HashEntry> = vec![];
+        for a in &self.dalgorithms {
+            let d = Digest::from_str(a)?;
+            let he = HashEntry {
+                digest: d,
+                hash: String::new(),
+            };
+            d_hashes.push(he);
+        }
 
         /*
          * Add files specified by -c.
@@ -156,11 +235,25 @@ impl MakeSum {
             let mut d = PathBuf::from(&self.distdir);
             d.push(f);
             if d.exists() {
-                let n = SumResult {
+                let f = d.clone();
+                let f = match f.strip_prefix(&self.distdir)?.to_str() {
+                    Some(s) => s,
+                    None => {
+                        eprintln!(
+                            "ERROR: File '{}' is not valid unicode.",
+                            d.display()
+                        );
+                        std::process::exit(1);
+                    }
+                };
+                let n = DistinfoEntry {
+                    filetype: DistinfoType::Distfile,
                     filepath: d,
+                    filename: f.to_string(),
+                    hashes: d_hashes.clone(),
                     ..Default::default()
                 };
-                distfiles.push(n);
+                distinfo.push(n);
             }
         }
 
@@ -184,98 +277,160 @@ impl MakeSum {
                 let mut d = PathBuf::from(&self.distdir);
                 d.push(line);
                 if d.exists() {
-                    let n = SumResult {
+                    let f = d.clone();
+                    let f = match f.strip_prefix(&self.distdir)?.to_str() {
+                        Some(s) => s,
+                        None => {
+                            eprintln!(
+                                "ERROR: File '{}' is not valid unicode.",
+                                d.display()
+                            );
+                            std::process::exit(1);
+                        }
+                    };
+                    let n = DistinfoEntry {
+                        filetype: DistinfoType::Distfile,
                         filepath: d,
+                        filename: f.to_string(),
+                        hashes: d_hashes.clone(),
                         ..Default::default()
                     };
-                    distfiles.push(n);
+                    distinfo.push(n);
                 }
             }
         }
 
         /*
-         * Calculate hashes for each distfile.
+         * Create a hashes vec that we can clone for each patchfile entry.
          */
-        for d in &mut distfiles {
-            for a in &self.dalgorithms {
-                let mut file = fs::File::open(&d.filepath)?;
-                let alg = Digest::from_str(a)?;
-                let hash = alg.hash_file(&mut file)?;
-                d.hashes.insert(alg, hash);
-            }
-            let file = fs::File::open(&d.filepath)?;
-            let m = file.metadata()?;
-            d.size = m.len();
+        let mut p_hashes: Vec<HashEntry> = vec![];
+        for a in &self.palgorithms {
+            let d = Digest::from_str(a)?;
+            let he = HashEntry {
+                digest: d,
+                hash: String::new(),
+            };
+            p_hashes.push(he);
         }
 
-        /* Distfiles are sorted by filename regardless of input order. */
-        distfiles.sort_by(|a, b| a.filepath.cmp(&b.filepath));
+        /*
+         * Add patchfiles added as command line arguments.
+         */
+        for path in &self.patchfiles {
+            if let Some(filename) = is_patchfile(path) {
+                let n = DistinfoEntry {
+                    filetype: DistinfoType::Patch,
+                    filepath: path.to_path_buf(),
+                    filename,
+                    hashes: p_hashes.clone(),
+                    ..Default::default()
+                };
+                distinfo.push(n);
+            }
+        }
 
         /*
-         * Write each distfile to output.
+         * Order the Vec so that distfiles come first, followed by patches,
+         * and hashes for each are ordered by how they were specified on the
+         * command line.
          */
-        for d in distfiles {
-            let filename = d.filepath.strip_prefix(&self.distdir)?;
-            for a in &self.dalgorithms {
-                let alg = Digest::from_str(a)?;
+        distinfo.sort_by(|a, b| a.filepath.cmp(&b.filepath));
+
+        /*
+         * Now set up parallel processing of the Vec.
+         */
+        let mut threads = vec![];
+        let active_threads = Arc::new(Mutex::new(0));
+        let max_threads = self.jobs;
+
+        /*
+         * Wrap each distinfo entry in its own Mutex.
+         */
+        let distinfo: Vec<_> = distinfo
+            .into_iter()
+            .map(|s| Arc::new(Mutex::new(s)))
+            .collect();
+
+        /*
+         * Each active thread calls the .calculate() function for its entry
+         * in the Vec, which stores the resulting hashes (and optional size)
+         * back into the entry.
+         */
+        for d in &distinfo {
+            let active_threads = Arc::clone(&active_threads);
+            let d = Arc::clone(d);
+            loop {
+                {
+                    let mut active = active_threads.lock().unwrap();
+                    if *active < max_threads {
+                        *active += 1;
+                        break;
+                    }
+                }
+                thread::yield_now();
+            }
+            let t = thread::spawn(move || {
+                let mut d = d.lock().unwrap();
+                // XXX: Return correct Result here.
+                let _ = d.calculate();
+                {
+                    let mut active = active_threads.lock().unwrap();
+                    *active -= 1;
+                }
+            });
+            threads.push(t);
+        }
+        for t in threads {
+            t.join().unwrap();
+        }
+
+        /*
+         * Now that we're done processing, unwrap back to a plain Vec for
+         * simpler access.
+         */
+        let distinfo: Vec<_> = distinfo
+            .into_iter()
+            .map(|arc_mutex| {
+                Arc::try_unwrap(arc_mutex)
+                    .ok()
+                    .unwrap()
+                    .into_inner()
+                    .unwrap()
+            })
+            .collect();
+
+        /*
+         * Write distfiles.
+         */
+        for distfile in distinfo
+            .iter()
+            .filter(|&d| d.filetype == DistinfoType::Distfile)
+        {
+            let f = distfile.filepath.strip_prefix(&self.distdir)?;
+            for h in &distfile.hashes {
                 output.extend_from_slice(
-                    format!(
-                        "{} ({}) = {}\n",
-                        a,
-                        filename.display(),
-                        d.hashes.get(&alg).unwrap()
-                    )
-                    .as_bytes(),
+                    format!("{} ({}) = {}\n", h.digest, f.display(), h.hash,)
+                        .as_bytes(),
                 );
             }
             output.extend_from_slice(
-                format!("Size ({}) = {} bytes\n", filename.display(), d.size)
+                format!("Size ({}) = {} bytes\n", f.display(), distfile.size)
                     .as_bytes(),
             );
         }
 
         /*
-         * Build list of patchfiles.
+         * Write patches.
          */
-        let mut patchfiles: Vec<SumResult> = vec![];
-        for path in &self.patchfiles {
-            if let Some(filename) = is_patchfile(path) {
-                let n = SumResult {
-                    filepath: path.to_path_buf(),
-                    filename,
-                    ..Default::default()
-                };
-                patchfiles.push(n);
-            }
-        }
-
-        /*
-         * Calculate hashes for each patchfile.
-         */
-        for p in &mut patchfiles {
-            for a in &self.palgorithms {
-                let mut file = fs::File::open(&p.filepath)?;
-                let d = Digest::from_str(a)?;
-                let h = d.hash_patch(&mut file)?;
-                p.hashes.insert(d, h);
-            }
-        }
-
-        /* Patches are sorted by filename regardless of input order. */
-        patchfiles.sort_by(|a, b| a.filename.cmp(&b.filename));
-
-        /*
-         * Write each patchfile to output.
-         */
-        for p in patchfiles {
-            for a in &self.palgorithms {
-                let alg = Digest::from_str(a)?;
+        for patchfile in distinfo
+            .iter()
+            .filter(|&d| d.filetype == DistinfoType::Patch)
+        {
+            for h in &patchfile.hashes {
                 output.extend_from_slice(
                     format!(
                         "{} ({}) = {}\n",
-                        a,
-                        p.filename,
-                        p.hashes.get(&alg).unwrap()
+                        h.digest, patchfile.filename, h.hash,
                     )
                     .as_bytes(),
                 );
