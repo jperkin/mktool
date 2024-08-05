@@ -301,7 +301,29 @@ impl MakeSum {
         }
 
         /*
-         * Create a hashes vec that we can clone for each patchfile entry.
+         * If we weren't passed any distfiles, but there are entries in an
+         * existing distinfo, then they need to be retained.  This is how
+         * "makepatchsum" operates, by just operating on patch files and
+         * keeping any file entries.
+         */
+        if distinfo.is_empty() {
+            for (i, line) in input.lines().enumerate() {
+                // Skip $NetBSD$ and blank line
+                if i < 2 {
+                    continue;
+                }
+                let line = line?;
+                let s = line.split(&['(', ')']).collect::<Vec<_>>();
+                if s.len() == 3 && is_patchfile(s[1]).is_none() {
+                    output.extend_from_slice(line.as_bytes());
+                    output.extend_from_slice("\n".as_bytes());
+                }
+            }
+        }
+
+        /*
+         * Create a hashes Vec based on the requested algorithms from the
+         * command line argument that we can clone for each patchfile entry.
          */
         let mut p_hashes: Vec<HashEntry> = vec![];
         for a in &self.palgorithms {
@@ -317,7 +339,7 @@ impl MakeSum {
          * Add patchfiles added as command line arguments.
          */
         for path in &self.patchfiles {
-            if let Some(filename) = is_patchfile(path) {
+            if let Some(filename) = is_patchpath(path) {
                 let n = DistinfoEntry {
                     filetype: DistinfoType::Patch,
                     filepath: path.to_path_buf(),
@@ -438,6 +460,27 @@ impl MakeSum {
         }
 
         /*
+         * If we weren't passed any patchfiles, but there are entries in an
+         * existing distinfo, then they need to be retained.  This is how
+         * "makesum" operates, by just operating on distfiles and
+         * keeping any patch entries.
+         */
+        if self.patchfiles.is_empty() {
+            for (i, line) in input.lines().enumerate() {
+                // Skip $NetBSD$ and blank line
+                if i < 2 {
+                    continue;
+                }
+                let line = line?;
+                let s = line.split(&['(', ')']).collect::<Vec<_>>();
+                if s.len() == 3 && is_patchfile(s[1]).is_some() {
+                    output.extend_from_slice(line.as_bytes());
+                    output.extend_from_slice("\n".as_bytes());
+                }
+            }
+        }
+
+        /*
          * Write resulting distinfo file to stdout.
          */
         let mut stdout = io::stdout().lock();
@@ -459,34 +502,35 @@ impl MakeSum {
  * Verify that a supplied path is a valid patch file.  Returns a String
  * containing the patch filename if so, otherwise None.
  */
-fn is_patchfile(path: &Path) -> Option<String> {
-    if !path.is_file() {
-        return None;
-    }
-
-    let patchfile = path.file_name()?.to_str()?;
-
+fn is_patchfile(s: &str) -> Option<String> {
     /*
      * Skip local patches or temporary patch files created by e.g. mkpatches.
      */
-    if patchfile.starts_with("patch-local-")
-        || patchfile.ends_with(".orig")
-        || patchfile.ends_with(".rej")
-        || patchfile.ends_with("~")
+    if s.starts_with("patch-local-")
+        || s.ends_with(".orig")
+        || s.ends_with(".rej")
+        || s.ends_with("~")
     {
         return None;
     }
     /*
      * Match valid patch filenames.
      */
-    if patchfile.starts_with("patch-")
-        || (patchfile.starts_with("emul-") && patchfile.contains("-patch-"))
+    if s.starts_with("patch-")
+        || (s.starts_with("emul-") && s.contains("-patch-"))
     {
-        return Some(patchfile.to_string());
+        return Some(s.to_string());
     }
 
     /*
      * Anything else is invalid.
      */
     None
+}
+
+fn is_patchpath(path: &Path) -> Option<String> {
+    if !path.is_file() {
+        return None;
+    }
+    is_patchfile(path.file_name()?.to_str()?)
 }
