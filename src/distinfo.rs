@@ -25,7 +25,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 #[derive(Args, Debug)]
-pub struct MakeSum {
+pub struct DistInfo {
     #[arg(short = 'a', value_name = "algorithm")]
     #[arg(help = "Algorithm digests to create for each distfile")]
     dalgorithms: Vec<String>,
@@ -64,11 +64,11 @@ pub struct MakeSum {
 }
 
 /**
- * [`DistinfoType`] contains the type of file, as source files and patches are
+ * [`DistInfoType`] contains the type of file, as source files and patches are
  * handled differently.
  */
 #[derive(Clone, Debug, Default, Eq, Hash, PartialEq)]
-enum DistinfoType {
+enum DistInfoType {
     /**
      * Regular distribution file, e.g. source tarball for a package.
      */
@@ -97,14 +97,14 @@ struct HashEntry {
 }
 
 /**
- * [`DistinfoEntry`] contains information about a file entry in the distinfo file.
+ * [`DistInfoEntry`] contains information about a file entry in the distinfo file.
  */
 #[derive(Clone, Debug, Default)]
-struct DistinfoEntry {
+struct DistInfoEntry {
     /**
      * Whether this is a distfile or a patch file.
      */
-    filetype: DistinfoType,
+    filetype: DistInfoType,
     /**
      * Full path to file.
      */
@@ -123,22 +123,22 @@ struct DistinfoEntry {
     hashes: Vec<HashEntry>,
 }
 
-impl DistinfoEntry {
+impl DistInfoEntry {
     fn calculate(
         &mut self,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         for h in &mut self.hashes {
             let mut f = fs::File::open(&self.filepath)?;
             match self.filetype {
-                DistinfoType::Distfile => {
+                DistInfoType::Distfile => {
                     h.hash = h.digest.hash_file(&mut f)?;
                 }
-                DistinfoType::Patch => {
+                DistInfoType::Patch => {
                     h.hash = h.digest.hash_patch(&mut f)?;
                 }
             };
         }
-        if self.filetype == DistinfoType::Distfile {
+        if self.filetype == DistInfoType::Distfile {
             let f = fs::File::open(&self.filepath)?;
             let m = f.metadata()?;
             self.size = m.len();
@@ -147,7 +147,7 @@ impl DistinfoEntry {
     }
 }
 
-impl MakeSum {
+impl DistInfo {
     pub fn run(&self) -> Result<i32, Box<dyn std::error::Error>> {
         /*
          * Store input "distinfo" and output as u8 vecs.  These are compared at
@@ -206,10 +206,10 @@ impl MakeSum {
 
         /*
          * On the first pass all of the supplied files (whether distfiles or
-         * patchfiles) are added to a Vec of DistinfoEntry's, along with the
+         * patchfiles) are added to a Vec of DistInfoEntry's, along with the
          * algorithms to be calculated for each.
          */
-        let mut distinfo: Vec<DistinfoEntry> = vec![];
+        let mut distinfo: Vec<DistInfoEntry> = vec![];
 
         /*
          * Create a hashes vec that we can clone for each distinfo entry.
@@ -246,8 +246,8 @@ impl MakeSum {
                         std::process::exit(1);
                     }
                 };
-                let n = DistinfoEntry {
-                    filetype: DistinfoType::Distfile,
+                let n = DistInfoEntry {
+                    filetype: DistInfoType::Distfile,
                     filepath: d,
                     filename: f.to_string(),
                     hashes: d_hashes.clone(),
@@ -288,8 +288,8 @@ impl MakeSum {
                             std::process::exit(1);
                         }
                     };
-                    let n = DistinfoEntry {
-                        filetype: DistinfoType::Distfile,
+                    let n = DistInfoEntry {
+                        filetype: DistInfoType::Distfile,
                         filepath: d,
                         filename: f.to_string(),
                         hashes: d_hashes.clone(),
@@ -340,8 +340,8 @@ impl MakeSum {
          */
         for path in &self.patchfiles {
             if let Some(filename) = is_patchpath(path) {
-                let n = DistinfoEntry {
-                    filetype: DistinfoType::Patch,
+                let n = DistInfoEntry {
+                    filetype: DistInfoType::Patch,
                     filepath: path.to_path_buf(),
                     filename,
                     hashes: p_hashes.clone(),
@@ -426,7 +426,7 @@ impl MakeSum {
          */
         for distfile in distinfo
             .iter()
-            .filter(|&d| d.filetype == DistinfoType::Distfile)
+            .filter(|&d| d.filetype == DistInfoType::Distfile)
         {
             let f = distfile.filepath.strip_prefix(&self.distdir)?;
             for h in &distfile.hashes {
@@ -446,7 +446,7 @@ impl MakeSum {
          */
         for patchfile in distinfo
             .iter()
-            .filter(|&d| d.filetype == DistinfoType::Patch)
+            .filter(|&d| d.filetype == DistInfoType::Patch)
         {
             for h in &patchfile.hashes {
                 output.extend_from_slice(

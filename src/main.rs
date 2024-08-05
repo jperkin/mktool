@@ -14,7 +14,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-mod makesum;
+mod distinfo;
 
 use clap::{Parser, Subcommand};
 
@@ -33,14 +33,14 @@ pub struct Cli {
 #[command(rename_all = "lower")]
 enum Commands {
     /// Create or update distinfo file
-    MakeSum(makesum::MakeSum),
+    DistInfo(distinfo::DistInfo),
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
     let rv = match &cli.command {
-        Commands::MakeSum(cmd) => cmd.run()?,
+        Commands::DistInfo(cmd) => cmd.run()?,
     };
 
     std::process::exit(rv);
