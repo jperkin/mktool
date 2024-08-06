@@ -16,6 +16,7 @@
 
 use clap::Args;
 use pkgsrc::digest::Digest;
+use std::env;
 use std::fs;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Write};
@@ -50,9 +51,9 @@ pub struct DistInfo {
     #[arg(help = "List of distfiles to ignore (unused)")]
     ignorefile: Option<PathBuf>,
 
-    #[arg(short = 'j', value_name = "jobs", default_value = "4")]
-    #[arg(help = "Number of parallel jobs to process at a time")]
-    jobs: u64,
+    #[arg(short = 'j', value_name = "jobs")]
+    #[arg(help = "Maximum number of threads (or \"MKTOOL_JOBS\" env var)")]
+    jobs: Option<u64>,
 
     #[arg(short = 'p', value_name = "algorithm")]
     #[arg(help = "Algorithm digests to create for each patchfile")]
@@ -368,7 +369,14 @@ impl DistInfo {
          */
         let mut threads = vec![];
         let active_threads = Arc::new(Mutex::new(0));
-        let max_threads = self.jobs;
+        let default_threads = 4;
+        let max_threads = match self.jobs {
+            Some(n) => n,
+            None => match env::var("MKTOOL_JOBS") {
+                Ok(n) => n.parse::<u64>().unwrap_or(default_threads),
+                Err(_) => default_threads,
+            },
+        };
 
         /*
          * Wrap each distinfo entry in its own Mutex.

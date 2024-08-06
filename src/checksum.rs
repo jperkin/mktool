@@ -14,10 +14,11 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-use crate::distinfo::{DistInfoEntry, DistInfoType, HashEntry};
 use clap::Args;
+use crate::distinfo::{DistInfoEntry, DistInfoType, HashEntry};
 use pkgsrc::digest::Digest;
 use std::collections::HashMap;
+use std::env;
 use std::fs;
 use std::io::{self, BufRead, BufReader};
 use std::path::PathBuf;
@@ -35,9 +36,9 @@ pub struct Checksum {
     #[arg(help = "Read files from input instead of command line arguments")]
     input: Option<PathBuf>,
 
-    #[arg(short = 'j', value_name = "jobs", default_value = "4")]
-    #[arg(help = "Number of parallel jobs to process at a time")]
-    jobs: u64,
+    #[arg(short = 'j', value_name = "jobs")]
+    #[arg(help = "Maximum number of threads (or \"MKTOOL_JOBS\" env var)")]
+    jobs: Option<u64>,
 
     #[arg(short = 'p', default_value = "false")]
     #[arg(help = "Operate in patch mode")]
@@ -234,7 +235,15 @@ impl Checksum {
          */
         let mut threads = vec![];
         let active_threads = Arc::new(Mutex::new(0));
-        let max_threads = self.jobs;
+        let default_threads = 4;
+        let max_threads = match self.jobs {
+            Some(n) => n,
+            None => match env::var("MKTOOL_JOBS") {
+                Ok(n) => n.parse::<u64>().unwrap_or(default_threads),
+                Err(_) => default_threads,
+            },
+        };
+
         let di_vec: Vec<_> = distfiles
             .into_values()
             .map(|v| Arc::new(Mutex::new(v)))
