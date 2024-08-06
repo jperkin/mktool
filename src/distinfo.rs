@@ -68,7 +68,7 @@ pub struct DistInfo {
  * handled differently.
  */
 #[derive(Clone, Debug, Default, Eq, Hash, PartialEq)]
-enum DistInfoType {
+pub enum DistInfoType {
     /**
      * Regular distribution file, e.g. source tarball for a package.
      */
@@ -85,7 +85,7 @@ enum DistInfoType {
  * calculated for an associated file.
  */
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-struct HashEntry {
+pub struct HashEntry {
     /**
      * The [`Digest`] type used for this entry.
      */
@@ -100,27 +100,32 @@ struct HashEntry {
  * [`DistInfoEntry`] contains information about a file entry in the distinfo file.
  */
 #[derive(Clone, Debug, Default)]
-struct DistInfoEntry {
+pub struct DistInfoEntry {
     /**
      * Whether this is a distfile or a patch file.
      */
-    filetype: DistInfoType,
+    pub filetype: DistInfoType,
     /**
      * Full path to file.
      */
-    filepath: PathBuf,
-    /*
+    pub filepath: PathBuf,
+    /**
      * Filename for printing.  Must be valid UTF-8.
      */
-    filename: String,
+    pub filename: String,
     /**
      * File size (not used for patches).
      */
-    size: u64,
+    pub size: u64,
     /**
      * Computed hashes, one entry per Digest type.
      */
-    hashes: Vec<HashEntry>,
+    pub hashes: Vec<HashEntry>,
+    /**
+     * Whether this entry has been processed.  What that means in practise
+     * will differ depending on users of this struct.
+     */
+    pub processed: bool,
 }
 
 impl DistInfoEntry {
