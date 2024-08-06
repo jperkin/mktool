@@ -14,6 +14,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+use crate::distinfo::DistInfoEntry;
 use clap::Args;
 use pkgsrc::digest::Digest;
 use std::collections::HashMap;
@@ -49,17 +50,12 @@ pub struct Checksum {
     files: Vec<PathBuf>,
 }
 
-struct DistFile {
-    path: PathBuf,
-    seen: bool,
-}
-
 impl Checksum {
     pub fn run(&self) -> Result<i32, Box<dyn std::error::Error>> {
         /*
          * List of distfiles to check.
          */
-        let mut distfiles: HashMap<String, DistFile> = HashMap::new();
+        let mut distfiles: HashMap<String, DistInfoEntry> = HashMap::new();
 
         /*
          * Iterate over files passed on the command line, optionally stripping
@@ -80,9 +76,10 @@ impl Checksum {
             };
             distfiles.insert(
                 f.to_string(),
-                DistFile {
-                    path: file.clone(),
-                    seen: false,
+                DistInfoEntry {
+                    filepath: file.clone(),
+                    processed: false,
+                    ..Default::default()
                 },
             );
         }
@@ -153,12 +150,12 @@ impl Checksum {
                 None => continue,
             };
 
-            df.seen = true;
+            df.processed = true;
 
             /*
              * Calculate digest based on whether a distfile or patch.
              */
-            let mut f = fs::File::open(&df.path)?;
+            let mut f = fs::File::open(&df.filepath)?;
             let d = Digest::from_str(algorithm)?;
             let h = match self.patchmode {
                 true => d.hash_patch(&mut f)?,
@@ -181,7 +178,7 @@ impl Checksum {
          * when parsing distinfo.
          */
         for (k, v) in distfiles {
-            if !v.seen {
+            if !v.processed {
                 eprintln!("checksum: No Checksum recorded for {}", k);
                 return Ok(1);
             }
