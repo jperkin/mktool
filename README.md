@@ -9,14 +9,14 @@ grow.
 
 For example, with the profligation of Go modules used in newer Go software,
 www/grafana now has over 5,000 distfiles.  This exposes various issues in
-the current pkgsrc `distinfo.awk` script that are hard to work around.  This
-tool implements a `distinfo` command that replaces `distinfo.awk`, with the
-following performance improvement:
+the current pkgsrc checksum scripts that are hard to work around.  This
+tool implements replacements with the following performance improvements
+when running in www/grafana on a 32-core SmartOS host:
 
-|  Implementation | Time to run `bmake distinfo` |
-|----------------:|-----------------------------:|
-|    distinfo.awk |        3 minutes, 30 seconds |
-| mktool distinfo |                    2 seconds |
+|          Command | Existing pkgsrc scripts |      mktool |  Speedup |
+|-----------------:|------------------------:|------------:|---------:|
+| `bmake checksum` |              10 seconds |   2 seconds |   **5x** |
+| `bmake distinfo` |   3 minutes, 30 seconds |   2 seconds | **100x** |
 
 As pkgsrc strives to be as portable as possible, at no point will any of the
 commands implemented by `mktool` become mandatory.  This tool simply exists
@@ -53,10 +53,3 @@ A replacement for
 
 A replacement for
 [pkgsrc/mk/checksum/distinfo.awk](https://github.com/NetBSD/pkgsrc/blob/trunk/mk/checksum/distinfo.awk)
-
-Performance comparison:
-
-|  Implementation | Time to run `bmake distinfo` |
-|----------------:|-----------------------------:|
-|    distinfo.awk |        3 minutes, 30 seconds |
-| mktool distinfo |                    2 seconds |
