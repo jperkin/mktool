@@ -341,7 +341,7 @@ dependencies = [
 
 [[package]]
 name = "mktool"
-version = "0.1.4"
+version = "0.1.7"
 dependencies = [
  "clap 4.5.11",
  "pkgsrc",
