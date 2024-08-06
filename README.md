@@ -31,14 +31,16 @@ Install using `cargo`:
 cargo install mktool
 ```
 
-At some point in the future it will hopefully be possible to enable `mktool`
-by simply setting:
+and add to `mk.conf`:
 
 ```make
-TOOLS_PLATFORM.mktool=  /path/to/mktool
+TOOLS_PLATFORM.mktool=  ${HOME}/.cargo/bin/mktool
 ```
 
-in your `mk.conf`, and any supported commands will be automatically enabled.
+The hooks into the pkgsrc infrastructure are not yet committed.  Until then,
+you'll need to apply
+[`these changesets`](https://github.com/NetBSD/pkgsrc/compare/trunk...TritonDataCenter:pkgsrc:dev/mktool)
+manually.  These will hopefully be added soon once things are approved.
 
 ## Commands
 
