@@ -66,9 +66,11 @@ impl Checksum {
          * a suffix from them, and storing in the "distfiles" HashMap.
          */
         for file in &self.files {
-            // XXX: return a proper Result here.
-            let f = file.file_name().expect("unable to extract filename");
-            let f = f.to_str().expect("unable to convert filename to str");
+            let f = file
+                .file_name()
+                .ok_or("Input is not a filename")?
+                .to_str()
+                .ok_or("Filename is not valid unicode")?;
             let f = match &self.stripsuffix {
                 Some(s) => match f.strip_suffix(s) {
                     Some(s) => s,
