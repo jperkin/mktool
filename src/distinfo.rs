@@ -89,11 +89,11 @@ pub struct HashEntry {
     /**
      * The [`Digest`] type used for this entry.
      */
-    digest: Digest,
+    pub digest: Digest,
     /**
      * A [`String`] result after the digest hash has been calculated.
      */
-    hash: String,
+    pub hash: String,
 }
 
 /**
@@ -129,7 +129,7 @@ pub struct DistInfoEntry {
 }
 
 impl DistInfoEntry {
-    fn calculate(
+    pub fn calculate(
         &mut self,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         for h in &mut self.hashes {
