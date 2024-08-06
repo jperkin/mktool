@@ -19,7 +19,7 @@ use clap::Args;
 use pkgsrc::digest::Digest;
 use std::collections::HashMap;
 use std::fs;
-use std::io::BufRead;
+use std::io::{self, BufRead, BufReader};
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
@@ -30,6 +30,10 @@ pub struct Checksum {
     #[arg(short = 'a', value_name = "algorithm")]
     #[arg(help = "Only verify checksums for the specified algorithm")]
     algorithm: Option<String>,
+
+    #[arg(short = 'I', value_name = "input")]
+    #[arg(help = "Read files from input instead of command line arguments")]
+    input: Option<PathBuf>,
 
     #[arg(short = 'j', value_name = "jobs", default_value = "4")]
     #[arg(help = "Number of parallel jobs to process at a time")]
@@ -64,6 +68,43 @@ impl Checksum {
         } else {
             DistInfoType::Distfile
         };
+
+        /*
+         * Add files passed in via -I (supporting stdin if set to "-").
+         */
+        if let Some(infile) = &self.input {
+            let reader: Box<dyn io::BufRead> = match infile.to_str() {
+                Some("-") => Box::new(io::stdin().lock()),
+                Some(f) => Box::new(BufReader::new(fs::File::open(f)?)),
+                None => {
+                    eprintln!(
+                        "ERROR: File '{}' is not valid unicode.",
+                        infile.display()
+                    );
+                    std::process::exit(1);
+                }
+            };
+            for line in reader.lines() {
+                let line = line?;
+                let file = PathBuf::from(line.clone());
+                let f = match &self.stripsuffix {
+                    Some(s) => match line.strip_suffix(s) {
+                        Some(s) => s,
+                        None => line.as_str(),
+                    },
+                    None => line.as_str(),
+                };
+                distfiles.insert(
+                    f.to_string(),
+                    DistInfoEntry {
+                        filetype: di_type.clone(),
+                        filepath: file.clone(),
+                        processed: false,
+                        ..Default::default()
+                    },
+                );
+            }
+        }
 
         /*
          * Iterate over files passed on the command line, optionally stripping
