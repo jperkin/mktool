@@ -16,6 +16,7 @@
 
 use clap::Args;
 use pkgsrc::digest::Digest;
+use pkgsrc::distinfo::Checksum;
 use std::env;
 use std::fs;
 use std::fs::File;
@@ -82,22 +83,6 @@ pub enum DistInfoType {
 }
 
 /**
- * [`HashEntry`] contains the [`Digest`] type and the [`String`] hash it
- * calculated for an associated file.
- */
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub struct HashEntry {
-    /**
-     * The [`Digest`] type used for this entry.
-     */
-    pub digest: Digest,
-    /**
-     * A [`String`] result after the digest hash has been calculated.
-     */
-    pub hash: String,
-}
-
-/**
  * [`DistInfoEntry`] contains information about a file entry in the distinfo file.
  */
 #[derive(Clone, Debug, Default)]
@@ -121,7 +106,7 @@ pub struct DistInfoEntry {
     /**
      * Computed hashes, one entry per Digest type.
      */
-    pub hashes: Vec<HashEntry>,
+    pub hashes: Vec<Checksum>,
     /**
      * Whether this entry has been processed.  What that means in practise
      * will differ depending on users of this struct.
@@ -220,10 +205,10 @@ impl DistInfo {
         /*
          * Create a hashes vec that we can clone for each distinfo entry.
          */
-        let mut d_hashes: Vec<HashEntry> = vec![];
+        let mut d_hashes: Vec<Checksum> = vec![];
         for a in &self.dalgorithms {
             let d = Digest::from_str(a)?;
-            let he = HashEntry {
+            let he = Checksum {
                 digest: d,
                 hash: String::new(),
             };
@@ -331,10 +316,10 @@ impl DistInfo {
          * Create a hashes Vec based on the requested algorithms from the
          * command line argument that we can clone for each patchfile entry.
          */
-        let mut p_hashes: Vec<HashEntry> = vec![];
+        let mut p_hashes: Vec<Checksum> = vec![];
         for a in &self.palgorithms {
             let d = Digest::from_str(a)?;
-            let he = HashEntry {
+            let he = Checksum {
                 digest: d,
                 hash: String::new(),
             };

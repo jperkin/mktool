@@ -15,8 +15,9 @@
  */
 
 use clap::Args;
-use crate::distinfo::{DistInfoEntry, DistInfoType, HashEntry};
+use crate::distinfo::{DistInfoEntry, DistInfoType};
 use pkgsrc::digest::Digest;
+use pkgsrc::distinfo;
 use std::collections::HashMap;
 use std::env;
 use std::fs;
@@ -205,13 +206,13 @@ impl Checksum {
                 if algorithm != a {
                     continue;
                 }
-                df.hashes.push(HashEntry {
+                df.hashes.push(distinfo::Checksum {
                     digest: d,
                     hash: String::new(),
                 });
             } else {
                 let d = Digest::from_str(algorithm)?;
-                df.hashes.push(HashEntry {
+                df.hashes.push(distinfo::Checksum {
                     digest: d,
                     hash: String::new(),
                 });

@@ -13,4 +13,4 @@ edition = "2021"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
-pkgsrc = "0.1.19"
+pkgsrc = "0.1.22"
