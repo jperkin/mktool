@@ -83,10 +83,10 @@ pub enum DistInfoType {
 }
 
 /**
- * [`DistInfoEntry`] contains information about a file entry in the distinfo file.
+ * [`Distfile`] contains information about a file entry in the distinfo file.
  */
 #[derive(Clone, Debug, Default)]
-pub struct DistInfoEntry {
+pub struct Distfile {
     /**
      * Whether this is a distfile or a patch file.
      */
@@ -114,7 +114,7 @@ pub struct DistInfoEntry {
     pub processed: bool,
 }
 
-impl DistInfoEntry {
+impl Distfile {
     pub fn calculate(
         &mut self,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -197,10 +197,10 @@ impl DistInfo {
 
         /*
          * On the first pass all of the supplied files (whether distfiles or
-         * patchfiles) are added to a Vec of DistInfoEntry's, along with the
+         * patchfiles) are added to a Vec of Distfile's, along with the
          * algorithms to be calculated for each.
          */
-        let mut distinfo: Vec<DistInfoEntry> = vec![];
+        let mut distinfo: Vec<Distfile> = vec![];
 
         /*
          * Create a hashes vec that we can clone for each distinfo entry.
@@ -237,7 +237,7 @@ impl DistInfo {
                         std::process::exit(1);
                     }
                 };
-                let n = DistInfoEntry {
+                let n = Distfile {
                     filetype: DistInfoType::Distfile,
                     filepath: d,
                     filename: f.to_string(),
@@ -279,7 +279,7 @@ impl DistInfo {
                             std::process::exit(1);
                         }
                     };
-                    let n = DistInfoEntry {
+                    let n = Distfile {
                         filetype: DistInfoType::Distfile,
                         filepath: d,
                         filename: f.to_string(),
@@ -331,7 +331,7 @@ impl DistInfo {
          */
         for path in &self.patchfiles {
             if let Some(filename) = is_patchpath(path) {
-                let n = DistInfoEntry {
+                let n = Distfile {
                     filetype: DistInfoType::Patch,
                     filepath: path.to_path_buf(),
                     filename,

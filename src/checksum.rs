@@ -15,7 +15,7 @@
  */
 
 use clap::Args;
-use crate::distinfo::{DistInfoEntry, DistInfoType};
+use crate::distinfo::{Distfile, DistInfoType};
 use pkgsrc::digest::Digest;
 use pkgsrc::distinfo;
 use std::collections::HashMap;
@@ -63,7 +63,7 @@ impl Checksum {
         /*
          * List of distfiles to check.
          */
-        let mut distfiles: HashMap<String, DistInfoEntry> = HashMap::new();
+        let mut distfiles: HashMap<String, Distfile> = HashMap::new();
 
         let di_type = if self.patchmode {
             DistInfoType::Patch
@@ -98,7 +98,7 @@ impl Checksum {
                 };
                 distfiles.insert(
                     f.to_string(),
-                    DistInfoEntry {
+                    Distfile {
                         filetype: di_type.clone(),
                         filepath: file.clone(),
                         processed: false,
@@ -127,7 +127,7 @@ impl Checksum {
             };
             distfiles.insert(
                 f.to_string(),
-                DistInfoEntry {
+                Distfile {
                     filetype: di_type.clone(),
                     filepath: file.clone(),
                     processed: false,
@@ -281,7 +281,7 @@ impl Checksum {
         /*
          * Convert distfiles back into a HashMap.
          */
-        let distfiles: HashMap<String, DistInfoEntry> = di_vec
+        let distfiles: HashMap<String, Distfile> = di_vec
             .into_iter()
             .map(|arc_mutex| {
                 Arc::try_unwrap(arc_mutex)
