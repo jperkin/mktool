@@ -34,7 +34,7 @@ pub struct Cli {
 #[command(rename_all = "lower")]
 enum Commands {
     /// Verify checksums from a distinfo file.
-    Checksum(checksum::Checksum),
+    CheckSum(checksum::CheckSum),
     /// Create or update distinfo file.
     DistInfo(distinfo::DistInfo),
 }
@@ -43,7 +43,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
     let rv = match &cli.command {
-        Commands::Checksum(cmd) => cmd.run()?,
+        Commands::CheckSum(cmd) => cmd.run()?,
         Commands::DistInfo(cmd) => cmd.run()?,
     };
 

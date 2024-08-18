@@ -17,7 +17,7 @@
 use clap::Args;
 use crate::distinfo::{Distfile, DistInfoType};
 use pkgsrc::digest::Digest;
-use pkgsrc::distinfo;
+use pkgsrc::distinfo::Checksum;
 use std::collections::HashMap;
 use std::env;
 use std::fs;
@@ -28,7 +28,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 #[derive(Args, Debug)]
-pub struct Checksum {
+pub struct CheckSum {
     #[arg(short = 'a', value_name = "algorithm")]
     #[arg(help = "Only verify checksums for the specified algorithm")]
     algorithm: Option<String>,
@@ -58,7 +58,7 @@ pub struct Checksum {
     files: Vec<PathBuf>,
 }
 
-impl Checksum {
+impl CheckSum {
     pub fn run(&self) -> Result<i32, Box<dyn std::error::Error>> {
         /*
          * List of distfiles to check.
@@ -206,13 +206,13 @@ impl Checksum {
                 if algorithm != a {
                     continue;
                 }
-                df.hashes.push(distinfo::Checksum {
+                df.hashes.push(Checksum {
                     digest: d,
                     hash: String::new(),
                 });
             } else {
                 let d = Digest::from_str(algorithm)?;
-                df.hashes.push(distinfo::Checksum {
+                df.hashes.push(Checksum {
                     digest: d,
                     hash: String::new(),
                 });
