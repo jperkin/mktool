@@ -14,8 +14,8 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+use crate::distinfo::{DistInfoType, Distfile};
 use clap::Args;
-use crate::distinfo::{Distfile, DistInfoType};
 use pkgsrc::digest::Digest;
 use pkgsrc::distinfo::Checksum;
 use std::collections::HashMap;
