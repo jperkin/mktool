@@ -13,4 +13,7 @@ edition = "2021"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
-pkgsrc = "0.1.22"
+indicatif = "0.17.8"
+pkgsrc = "0.1.25"
+reqwest = { version = "0.12.5", features = ["blocking"] }
+thiserror = "1.0.63"

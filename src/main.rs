@@ -16,6 +16,7 @@
 
 mod checksum;
 mod distinfo;
+mod fetch;
 
 use clap::{Parser, Subcommand};
 
@@ -37,6 +38,8 @@ enum Commands {
     CheckSum(checksum::CheckSum),
     /// Create or update distinfo file.
     DistInfo(distinfo::DistInfo),
+    /// Fetch distfiles.
+    Fetch(fetch::Fetch),
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -45,6 +48,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let rv = match &cli.command {
         Commands::CheckSum(cmd) => cmd.run()?,
         Commands::DistInfo(cmd) => cmd.run()?,
+        Commands::Fetch(cmd) => cmd.run()?,
     };
 
     std::process::exit(rv);
