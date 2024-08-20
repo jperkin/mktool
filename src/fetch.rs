@@ -218,6 +218,12 @@ fn fetch_and_verify(
     .unwrap()
     .progress_chars("##-");
 
+    if file_name.exists() {
+        match distinfo.check_file(&file_name) {
+            Ok(_) => return Ok(()),
+            Err(_) => fs::remove_file(&file_name)?,
+        }
+    }
     for site in &file.sites {
         let fname = file.filename.clone();
         let url = url_from_site(site, &file.filename);
