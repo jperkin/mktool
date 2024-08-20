@@ -206,13 +206,13 @@ impl CheckSum {
                 if algorithm != a {
                     continue;
                 }
-                df.hashes.push(Checksum {
+                df.entry.checksums.push(Checksum {
                     digest: d,
                     hash: String::new(),
                 });
             } else {
                 let d = Digest::from_str(algorithm)?;
-                df.hashes.push(Checksum {
+                df.entry.checksums.push(Checksum {
                     digest: d,
                     hash: String::new(),
                 });
@@ -317,7 +317,7 @@ impl CheckSum {
              * Find correct digest entry.
              */
             let mut found = false;
-            for h in &df.hashes {
+            for h in &df.entry.checksums {
                 if h.digest == alg && h.hash == hash {
                     println!("=> Checksum {} OK for {}", alg, file);
                     found = true;

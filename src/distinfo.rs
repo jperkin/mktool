@@ -16,7 +16,7 @@
 
 use clap::Args;
 use pkgsrc::digest::Digest;
-use pkgsrc::distinfo::Checksum;
+use pkgsrc::distinfo::{Checksum, Entry};
 use std::env;
 use std::fs;
 use std::fs::File;
@@ -88,25 +88,18 @@ pub enum DistInfoType {
 #[derive(Clone, Debug, Default)]
 pub struct Distfile {
     /**
-     * Whether this is a distfile or a patch file.
-     */
-    pub filetype: DistInfoType,
-    /**
      * Full path to file.
      */
     pub filepath: PathBuf,
     /**
-     * Filename for printing.  Must be valid UTF-8.
+     * Whether this is a distfile or a patch file.
      */
-    pub filename: String,
+    pub filetype: DistInfoType,
     /**
-     * File size (not used for patches).
+     * Information about this distfile (checksums and size) stored in a
+     * Distinfo [`Entry`].
      */
-    pub size: u64,
-    /**
-     * Computed hashes, one entry per Digest type.
-     */
-    pub hashes: Vec<Checksum>,
+    pub entry: Entry,
     /**
      * Whether this entry has been processed.  What that means in practise
      * will differ depending on users of this struct.
@@ -118,7 +111,7 @@ impl Distfile {
     pub fn calculate(
         &mut self,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        for h in &mut self.hashes {
+        for h in &mut self.entry.checksums {
             let mut f = fs::File::open(&self.filepath)?;
             match self.filetype {
                 DistInfoType::Distfile => {
@@ -132,7 +125,7 @@ impl Distfile {
         if self.filetype == DistInfoType::Distfile {
             let f = fs::File::open(&self.filepath)?;
             let m = f.metadata()?;
-            self.size = m.len();
+            self.entry.size = Some(m.len());
         }
         Ok(())
     }
@@ -237,11 +230,15 @@ impl DistInfo {
                         std::process::exit(1);
                     }
                 };
+                let e = Entry {
+                    filename: f.into(),
+                    checksums: d_hashes.clone(),
+                    ..Default::default()
+                };
                 let n = Distfile {
                     filetype: DistInfoType::Distfile,
                     filepath: d,
-                    filename: f.to_string(),
-                    hashes: d_hashes.clone(),
+                    entry: e,
                     ..Default::default()
                 };
                 distinfo.push(n);
@@ -279,11 +276,15 @@ impl DistInfo {
                             std::process::exit(1);
                         }
                     };
+                    let e = Entry {
+                        filename: f.into(),
+                        checksums: d_hashes.clone(),
+                        ..Default::default()
+                    };
                     let n = Distfile {
                         filetype: DistInfoType::Distfile,
                         filepath: d,
-                        filename: f.to_string(),
-                        hashes: d_hashes.clone(),
+                        entry: e,
                         ..Default::default()
                     };
                     distinfo.push(n);
@@ -331,11 +332,15 @@ impl DistInfo {
          */
         for path in &self.patchfiles {
             if let Some(filename) = is_patchpath(path) {
+                let e = Entry {
+                    filename: filename.into(),
+                    checksums: p_hashes.clone(),
+                    ..Default::default()
+                };
                 let n = Distfile {
                     filetype: DistInfoType::Patch,
                     filepath: path.to_path_buf(),
-                    filename,
-                    hashes: p_hashes.clone(),
+                    entry: e,
                     ..Default::default()
                 };
                 distinfo.push(n);
@@ -427,16 +432,18 @@ impl DistInfo {
             .filter(|&d| d.filetype == DistInfoType::Distfile)
         {
             let f = distfile.filepath.strip_prefix(&self.distdir)?;
-            for h in &distfile.hashes {
+            for h in &distfile.entry.checksums {
                 output.extend_from_slice(
                     format!("{} ({}) = {}\n", h.digest, f.display(), h.hash,)
                         .as_bytes(),
                 );
             }
-            output.extend_from_slice(
-                format!("Size ({}) = {} bytes\n", f.display(), distfile.size)
-                    .as_bytes(),
-            );
+            if let Some(size) = distfile.entry.size {
+                output.extend_from_slice(
+                    format!("Size ({}) = {} bytes\n", f.display(), size)
+                        .as_bytes(),
+                );
+            }
         }
 
         /*
@@ -446,11 +453,13 @@ impl DistInfo {
             .iter()
             .filter(|&d| d.filetype == DistInfoType::Patch)
         {
-            for h in &patchfile.hashes {
+            for h in &patchfile.entry.checksums {
                 output.extend_from_slice(
                     format!(
                         "{} ({}) = {}\n",
-                        h.digest, patchfile.filename, h.hash,
+                        h.digest,
+                        patchfile.entry.filename.display(),
+                        h.hash,
                     )
                     .as_bytes(),
                 );
