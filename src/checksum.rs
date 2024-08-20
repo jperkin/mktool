@@ -17,7 +17,7 @@
 use crate::distinfo::{DistInfoType, Distfile};
 use clap::Args;
 use pkgsrc::digest::Digest;
-use pkgsrc::distinfo::Checksum;
+use pkgsrc::distinfo::{Checksum, Distinfo};
 use std::collections::HashMap;
 use std::env;
 use std::fs;
@@ -63,7 +63,7 @@ impl CheckSum {
         /*
          * List of distfiles to check.
          */
-        let mut distfiles: HashMap<String, Distfile> = HashMap::new();
+        let mut distfiles: HashMap<PathBuf, Distfile> = HashMap::new();
 
         let di_type = if self.patchmode {
             DistInfoType::Patch
@@ -97,7 +97,7 @@ impl CheckSum {
                     None => line.as_str(),
                 };
                 distfiles.insert(
-                    f.to_string(),
+                    PathBuf::from(f),
                     Distfile {
                         filetype: di_type.clone(),
                         filepath: file.clone(),
@@ -110,7 +110,7 @@ impl CheckSum {
 
         /*
          * Iterate over files passed on the command line, optionally stripping
-         * a suffix from them, and storing in the "distfiles" HashMap.
+         * their suffix, and storing them in the distfiles HashMap.
          */
         for file in &self.files {
             let f = file
@@ -126,7 +126,7 @@ impl CheckSum {
                 None => f,
             };
             distfiles.insert(
-                f.to_string(),
+                PathBuf::from(f),
                 Distfile {
                     filetype: di_type.clone(),
                     filepath: file.clone(),
@@ -137,8 +137,7 @@ impl CheckSum {
         }
 
         /*
-         * Iterate over the "distinfo" file, selecting lines that we are
-         * interested in.
+         * Read in the supplied "distinfo" file.
          */
         let distinfo = match fs::read(&self.distinfo) {
             Ok(s) => s,
@@ -152,87 +151,55 @@ impl CheckSum {
                 return Ok(3);
             }
         };
+        let distinfo = Distinfo::from_bytes(&distinfo);
+
         /*
-         * Save this first pass to simplify the second pass at the end.
+         * Record from the distinfo file any matching entries that we will
+         * check against at the end once we've calculated the checksums.
          */
-        let mut di_lines: Vec<(Digest, String, String)> = vec![];
-        for (i, line) in distinfo.lines().enumerate() {
-            /*
-             * Skip $NetBSD$ header and blank line.
-             */
-            if i < 2 {
-                continue;
-            }
+        let mut distsums: Vec<(PathBuf, Digest, String)> = vec![];
 
-            let line = line?;
-            if line.starts_with("#") {
-                continue;
-            }
-
-            /*
-             * All lines should be of the form "alg (file) = hash".
-             */
-            let items = line.split(" ").collect::<Vec<_>>();
-            if items.len() != 4 {
-                continue;
-            }
-
-            let algorithm = items[0];
-            let distfile = items[1].split(&['(', ')']).collect::<String>();
-            let checksum = items[3];
-
-            /*
-             * Skip "Size" and "IGNORE" (legacy) lines.
-             */
-            if algorithm == "Size" || checksum == "IGNORE" {
-                continue;
-            }
-
-            /*
-             * Get the full path for the file from the distfiles HashMap,
-             * using the entry from distinfo as the key.
-             */
-            let df = match distfiles.get_mut(&distfile) {
-                Some(s) => s,
-                None => continue,
-            };
-
-            /*
-             * If a single algorithm is requested then match it, otherwise
-             * skip.
-             */
-            if let Some(a) = &self.algorithm {
-                let d = Digest::from_str(a)?;
-                if algorithm != a {
-                    continue;
-                }
-                df.entry.checksums.push(Checksum {
-                    digest: d,
-                    hash: String::new(),
-                });
-            } else {
-                let d = Digest::from_str(algorithm)?;
-                df.entry.checksums.push(Checksum {
-                    digest: d,
-                    hash: String::new(),
-                });
-            }
-
-            /*
-             * Mark as "seen", using processed flag, and save to di_lines for
-             * final pass.
-             */
-            df.processed = true;
-            di_lines.push((
-                Digest::from_str(algorithm)?,
-                distfile.to_string(),
-                checksum.to_string(),
-            ));
+        /*
+         * If a single algorithm is requested then match it, otherwise
+         * skip.
+         */
+        let mut single_digest: Option<Digest> = None;
+        if let Some(a) = &self.algorithm {
+            single_digest = Some(Digest::from_str(a)?);
         }
 
         /*
-         * Convert distfiles HashMap into a Vec, wrapping each in a Mutex, so
-         * that we can process them in parallel.
+         * Iterate over the entries stored in "distinfo", selecting any that
+         * match one of the filenames we've been passed, and their checksums.
+         */
+        for e in &distinfo.files() {
+            let df = match distfiles.get_mut(&e.filename) {
+                Some(s) => s,
+                None => continue,
+            };
+            for checksum in &e.checksums {
+                if let Some(ref digest) = single_digest {
+                    if *digest != checksum.digest {
+                        continue;
+                    }
+                }
+                df.entry.checksums.push(Checksum {
+                    digest: checksum.digest.clone(),
+                    hash: String::new(),
+                });
+                /* Set processed flag to indicate we've seen this file. */
+                df.processed = true;
+                distsums.push((
+                    e.filename.clone(),
+                    checksum.digest.clone(),
+                    checksum.hash.clone(),
+                ));
+            }
+        }
+
+        /*
+         * Convert the distfiles HashMap into a Vec, wrapping each in a Mutex,
+         * so that we can process them in parallel.
          */
         let mut threads = vec![];
         let active_threads = Arc::new(Mutex::new(0));
@@ -244,7 +211,6 @@ impl CheckSum {
                 Err(_) => default_threads,
             },
         };
-
         let di_vec: Vec<_> = distfiles
             .into_values()
             .map(|v| Arc::new(Mutex::new(v)))
@@ -279,9 +245,9 @@ impl CheckSum {
         }
 
         /*
-         * Convert distfiles back into a HashMap.
+         * Unwrap processed distfiles back into a plain HashMap.
          */
-        let distfiles: HashMap<String, Distfile> = di_vec
+        let distfiles: HashMap<PathBuf, Distfile> = di_vec
             .into_iter()
             .map(|arc_mutex| {
                 Arc::try_unwrap(arc_mutex)
@@ -290,17 +256,7 @@ impl CheckSum {
                     .into_inner()
                     .unwrap()
             })
-            .map(|p| {
-                (
-                    p.filepath
-                        .file_name()
-                        .expect("Input is not a filename")
-                        .to_str()
-                        .expect("Filename is not valid unicode")
-                        .to_string(),
-                    p,
-                )
-            })
+            .map(|p| (PathBuf::from(&p.filepath), p))
             .collect();
 
         /*
@@ -308,7 +264,7 @@ impl CheckSum {
          * multiple passes to keep the output order compatible with
          * checksum.awk.
          */
-        for (alg, file, hash) in di_lines {
+        for (file, digest, hash) in distsums {
             let df = match distfiles.get(&file) {
                 Some(s) => s,
                 None => continue,
@@ -318,14 +274,22 @@ impl CheckSum {
              */
             let mut found = false;
             for h in &df.entry.checksums {
-                if h.digest == alg && h.hash == hash {
-                    println!("=> Checksum {} OK for {}", alg, file);
+                if h.digest == digest && h.hash == hash {
+                    println!(
+                        "=> Checksum {} OK for {}",
+                        digest,
+                        file.display()
+                    );
                     found = true;
                     break;
                 }
             }
             if !found {
-                eprintln!("checksum: Checksum {} mismatch for {}", alg, file);
+                eprintln!(
+                    "checksum: Checksum {} mismatch for {}",
+                    digest,
+                    file.display()
+                );
                 return Ok(1);
             }
         }
@@ -333,9 +297,16 @@ impl CheckSum {
         for (k, v) in distfiles {
             if !v.processed {
                 if let Some(a) = &self.algorithm {
-                    eprintln!("checksum: No {} checksum recorded for {}", a, k);
+                    eprintln!(
+                        "checksum: No {} checksum recorded for {}",
+                        a,
+                        k.display()
+                    );
                 } else {
-                    eprintln!("checksum: No checksum recorded for {}", k);
+                    eprintln!(
+                        "checksum: No checksum recorded for {}",
+                        k.display()
+                    );
                 }
                 rv = 2;
             }
