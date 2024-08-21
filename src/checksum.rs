@@ -141,13 +141,12 @@ impl CheckSum {
          */
         let distinfo = match fs::read(&self.distinfo) {
             Ok(s) => s,
-            Err(e) => {
+            Err(_) => {
+                /* Compatible output/exit status with checksum.awk */
                 eprintln!(
-                    "ERROR: Could not open distinfo '{}': {}",
-                    &self.distinfo.display(),
-                    e
+                    "checksum: distinfo file missing: {}",
+                    &self.distinfo.display()
                 );
-                // Return code compatible with checksum.awk
                 return Ok(3);
             }
         };
