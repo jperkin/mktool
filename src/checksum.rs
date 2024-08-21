@@ -172,7 +172,13 @@ impl CheckSum {
          * Iterate over the entries stored in "distinfo", selecting any that
          * match one of the filenames we've been passed, and their checksums.
          */
-        for e in &distinfo.files() {
+        let entryiter = if self.patchmode {
+            &distinfo.patches()
+        } else {
+            &distinfo.files()
+        };
+
+        for e in entryiter {
             let df = match distfiles.get_mut(&e.filename) {
                 Some(s) => s,
                 None => continue,
