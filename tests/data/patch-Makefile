@@ -1,0 +1,13 @@
+$NetBSD: patch-Makefile,v 1.1 1970/01/01 00:00:00 dmr Exp $
+
+This is an example patch.  Any line that contains $NetBSD, such as the
+one above, should be excluded from the hash.
+
+--- Makefile.orig	1970-01-01 00:00:00.000000000 +0000
++++ Makefile
+@@ -1,4 +1,4 @@
+-FOO=	5.10
++FOO=	5.11
+
+ all:
+ .if ${FOO} > 5.4

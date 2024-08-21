@@ -1,0 +1,4 @@
+# $NetBSD$
+
+This is another test file for mktool checksum.  There shouldn't be any parsing
+of it at all (e.g. for $NetBSD$ strings), it should just be hashed as-is.

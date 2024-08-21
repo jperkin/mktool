@@ -1,0 +1,9 @@
+$NetBSD: distinfo,v 1.1 1970/01/01 00:00:01 ken Exp $
+
+BLAKE2s (digest1.txt) = no
+SHA512 (digest1.txt) = stillno
+Size (digest1.txt) = -1 bytes
+BLAKE2s (digest2.txt) = blah
+SHA512 (digest2.txt) = whatever
+Size (digest2.txt) = 0 bytes
+SHA1 (patch-Makefile) = definitelymaybe
