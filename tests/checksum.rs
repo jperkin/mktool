@@ -129,6 +129,43 @@ fn test_checksum() {
     assert_eq!(cmd.stderr, "".as_bytes());
 
     /*
+     * Test strip suffix mode.  Use filename digest1.txt.suffix but validate
+     * against the digest1.txt distinfo entry.
+     */
+    let output = "=> Checksum SHA512 OK for digest1.txt\n";
+    let cmd = Command::new(mktool)
+        .arg("checksum")
+        .arg("-a")
+        .arg("SHA512")
+        .arg("-s")
+        .arg(".suffix")
+        .arg(distinfo.clone())
+        .arg("digest1.txt.suffix")
+        .current_dir("tests/data")
+        .output()
+        .expect("unable to spawn {mktool}");
+    assert_eq!(cmd.status.code(), Some(0));
+    assert_eq!(cmd.stdout, output.as_bytes());
+    assert_eq!(cmd.stderr, "".as_bytes());
+
+    /*
+     * Invalid suffix strip.
+     */
+    let output = "checksum: No checksum recorded for digest1.txt.suffix\n";
+    let cmd = Command::new(mktool)
+        .arg("checksum")
+        .arg("-s")
+        .arg(".badsuffix")
+        .arg(distinfo.clone())
+        .arg("digest1.txt.suffix")
+        .current_dir("tests/data")
+        .output()
+        .expect("unable to spawn {mktool}");
+    assert_eq!(cmd.status.code(), Some(2));
+    assert_eq!(cmd.stdout, "".as_bytes());
+    assert_eq!(cmd.stderr, output.as_bytes());
+
+    /*
      * No checksum type recorded.
      */
     let output = "checksum: No SHA1 checksum recorded for digest1.txt\n";

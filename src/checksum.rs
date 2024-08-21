@@ -101,6 +101,7 @@ impl CheckSum {
                     Distfile {
                         filetype: di_type.clone(),
                         filepath: file.clone(),
+                        filename: f.into(),
                         processed: false,
                         ..Default::default()
                     },
@@ -130,6 +131,7 @@ impl CheckSum {
                 Distfile {
                     filetype: di_type.clone(),
                     filepath: file.clone(),
+                    filename: f.into(),
                     processed: false,
                     ..Default::default()
                 },
@@ -261,7 +263,7 @@ impl CheckSum {
                     .into_inner()
                     .unwrap()
             })
-            .map(|p| (PathBuf::from(&p.filepath), p))
+            .map(|p| (PathBuf::from(&p.filename), p))
             .collect();
 
         /*
