@@ -212,18 +212,24 @@ fn fetch_and_verify(
     let mut file_name = PathBuf::from(&file.distdir);
     file_name.push(&file.filename);
 
+    /*
+     * There's no support for resume yet.  If the file already exists and
+     * matches the correct size then assume it's ok (checksum will later
+     * verify that it is), otherwise remove and retry.
+     */
+    if file_name.exists() {
+        match distinfo.check_file_size(&file_name) {
+            Ok(_) => return Ok(()),
+            Err(_) => fs::remove_file(&file_name)?,
+        }
+    }
+
     let style = ProgressStyle::with_template(
         "[{msg:20!}] {bar:40.cyan/blue} {binary_bytes:>7}/{binary_total_bytes:7}",
     )
     .unwrap()
     .progress_chars("##-");
 
-    if file_name.exists() {
-        match distinfo.check_file(&file_name) {
-            Ok(_) => return Ok(()),
-            Err(_) => fs::remove_file(&file_name)?,
-        }
-    }
     for site in &file.sites {
         let fname = file.filename.clone();
         let url = url_from_site(site, &file.filename);
