@@ -18,81 +18,97 @@ use std::env;
 use std::path::PathBuf;
 use std::process::Command;
 
+const MKTOOL: &str = env!("CARGO_BIN_EXE_mktool");
+
+/*
+ * Invalid arguments.
+ *
+ * XXX: This is not fully compatible, checksum.awk exits 3, we exit 2, but
+ * unfortunatly this is hardcoded in clap.
+ */
 #[test]
-fn test_checksum() {
-    let mktool = env!("CARGO_BIN_EXE_mktool");
+fn test_checksum_invalid_args() {
+    let cmd = Command::new(MKTOOL)
+        .arg("checksum")
+        .output()
+        .expect("unable to spawn {MKTOOL}");
+    assert_eq!(cmd.status.code(), Some(2));
+}
+
+/*
+ * Test running with no input files.
+ */
+#[test]
+fn test_checksum_no_input() {
     let mut distinfo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     distinfo.push("tests/data/distinfo");
-
-    /*
-     * Invalid arguments.
-     *
-     * XXX: This is not fully compatible, checksum.awk exits 3, we exit 2, but
-     * unfortunatly this is hardcoded in clap.
-     */
-    let cmd = Command::new(mktool)
+    let cmd = Command::new(MKTOOL)
         .arg("checksum")
+        .arg(distinfo)
         .output()
-        .expect("unable to spawn {mktool}");
-    assert_eq!(cmd.status.code(), Some(2));
-
-    /*
-     * Test running with no input files.
-     */
-    let cmd = Command::new(mktool)
-        .arg("checksum")
-        .arg(distinfo.clone())
-        .output()
-        .expect("unable to spawn {mktool}");
+        .expect("unable to spawn {MKTOOL}");
     assert_eq!(cmd.status.code(), Some(0));
     assert_eq!(cmd.stdout, "".as_bytes());
     assert_eq!(cmd.stderr, "".as_bytes());
+}
 
-    /*
-     * Pass a nonexistent distinfo file.
-     */
-    let mut bad_di = distinfo.clone();
-    bad_di.push("oops");
+/*
+ * Pass a nonexistent distinfo file.
+ */
+#[test]
+fn test_checksum_bad_distinfo() {
+    let distinfo = PathBuf::from("/nonexistent");
     let output =
-        format!("checksum: distinfo file missing: {}\n", bad_di.display());
-    let cmd = Command::new(mktool)
+        format!("checksum: distinfo file missing: {}\n", distinfo.display());
+    let cmd = Command::new(MKTOOL)
         .arg("checksum")
-        .arg(bad_di)
+        .arg(distinfo)
         .output()
-        .expect("unable to spawn {mktool}");
+        .expect("unable to spawn {MKTOOL}");
     assert_eq!(cmd.status.code(), Some(3));
     assert_eq!(cmd.stdout, "".as_bytes());
     assert_eq!(cmd.stderr, output.as_bytes());
+}
 
-    /*
-     * Passing a file that doesn't exist in distinfo should print a message
-     * to stderr and exit 2.
-     */
-    let cmd = Command::new(mktool)
+/*
+ * Passing a file that doesn't exist in distinfo should print a message
+ * to stderr and exit 2.
+ */
+#[test]
+fn test_checksum_bad_distfile() {
+    let mut distinfo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    distinfo.push("tests/data/distinfo");
+    let cmd = Command::new(MKTOOL)
         .arg("checksum")
         .arg(distinfo.clone())
         .arg("foo")
         .output()
-        .expect("unable to spawn {mktool}");
+        .expect("unable to spawn {MKTOOL}");
     assert_eq!(cmd.status.code(), Some(2));
     assert_eq!(cmd.stdout, "".as_bytes());
     assert_eq!(
         cmd.stderr,
         "checksum: No checksum recorded for foo\n".as_bytes()
     );
+}
 
-    /*
-     * A valid full distfile test.
-     */
+/*
+ * Tests against a valid full distfile test.
+ */
+#[test]
+fn test_checksum_valid_distfile() {
+    let mut distinfo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    distinfo.push("tests/data/distinfo");
+
     let mut output = String::from("=> Checksum BLAKE2s OK for digest1.txt\n");
     output.push_str("=> Checksum SHA512 OK for digest1.txt\n");
-    let cmd = Command::new(mktool)
+    let cmd = Command::new(MKTOOL)
         .arg("checksum")
         .arg(distinfo.clone())
         .arg("digest1.txt")
         .current_dir("tests/data")
         .output()
-        .expect("unable to spawn {mktool}");
+        .expect("unable to spawn {MKTOOL}");
     assert_eq!(cmd.status.code(), Some(0));
     assert_eq!(cmd.stdout, output.as_bytes());
     assert_eq!(cmd.stderr, "".as_bytes());
@@ -101,7 +117,7 @@ fn test_checksum() {
      * Valid, but we only request a single algorithm each time.
      */
     let output = "=> Checksum BLAKE2s OK for digest1.txt\n";
-    let cmd = Command::new(mktool)
+    let cmd = Command::new(MKTOOL)
         .arg("checksum")
         .arg("-a")
         .arg("BLAKE2s")
@@ -109,13 +125,13 @@ fn test_checksum() {
         .arg("digest1.txt")
         .current_dir("tests/data")
         .output()
-        .expect("unable to spawn {mktool}");
+        .expect("unable to spawn {MKTOOL}");
     assert_eq!(cmd.status.code(), Some(0));
     assert_eq!(cmd.stdout, output.as_bytes());
     assert_eq!(cmd.stderr, "".as_bytes());
 
     let output = "=> Checksum SHA512 OK for digest2.txt\n";
-    let cmd = Command::new(mktool)
+    let cmd = Command::new(MKTOOL)
         .arg("checksum")
         .arg("-a")
         .arg("SHA512")
@@ -123,7 +139,7 @@ fn test_checksum() {
         .arg("digest2.txt")
         .current_dir("tests/data")
         .output()
-        .expect("unable to spawn {mktool}");
+        .expect("unable to spawn {MKTOOL}");
     assert_eq!(cmd.status.code(), Some(0));
     assert_eq!(cmd.stdout, output.as_bytes());
     assert_eq!(cmd.stderr, "".as_bytes());
@@ -136,8 +152,9 @@ fn test_checksum() {
     output.push_str("=> Checksum SHA512 OK for digest1.txt\n");
     output.push_str("=> Checksum BLAKE2s OK for digest2.txt\n");
     output.push_str("=> Checksum SHA512 OK for digest2.txt\n");
-    let outerr = String::from("checksum: No checksum recorded for digest11.txt\n");
-    let cmd = Command::new(mktool)
+    let outerr =
+        String::from("checksum: No checksum recorded for digest11.txt\n");
+    let cmd = Command::new(MKTOOL)
         .arg("checksum")
         .arg(distinfo.clone())
         .arg("digest2.txt")
@@ -145,17 +162,23 @@ fn test_checksum() {
         .arg("digest1.txt")
         .current_dir("tests/data")
         .output()
-        .expect("unable to spawn {mktool}");
+        .expect("unable to spawn {MKTOOL}");
     assert_eq!(cmd.status.code(), Some(2));
     assert_eq!(cmd.stdout, output.as_bytes());
     assert_eq!(cmd.stderr, outerr.as_bytes());
+}
 
-    /*
-     * Test strip suffix mode.  Use filename digest1.txt.suffix but validate
-     * against the digest1.txt distinfo entry.
-     */
+/*
+ * Test strip suffix mode.  Use filename digest1.txt.suffix but validate
+ * against the digest1.txt distinfo entry.
+ */
+#[test]
+fn test_checksum_strip_mode() {
+    let mut distinfo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    distinfo.push("tests/data/distinfo");
+
     let output = "=> Checksum SHA512 OK for digest1.txt\n";
-    let cmd = Command::new(mktool)
+    let cmd = Command::new(MKTOOL)
         .arg("checksum")
         .arg("-a")
         .arg("SHA512")
@@ -165,16 +188,14 @@ fn test_checksum() {
         .arg("digest1.txt.suffix")
         .current_dir("tests/data")
         .output()
-        .expect("unable to spawn {mktool}");
+        .expect("unable to spawn {MKTOOL}");
     assert_eq!(cmd.status.code(), Some(0));
     assert_eq!(cmd.stdout, output.as_bytes());
     assert_eq!(cmd.stderr, "".as_bytes());
 
-    /*
-     * Invalid suffix strip.
-     */
+    /* Invalid suffix strip.  */
     let output = "checksum: No checksum recorded for digest1.txt.suffix\n";
-    let cmd = Command::new(mktool)
+    let cmd = Command::new(MKTOOL)
         .arg("checksum")
         .arg("-s")
         .arg(".badsuffix")
@@ -182,16 +203,21 @@ fn test_checksum() {
         .arg("digest1.txt.suffix")
         .current_dir("tests/data")
         .output()
-        .expect("unable to spawn {mktool}");
+        .expect("unable to spawn {MKTOOL}");
     assert_eq!(cmd.status.code(), Some(2));
     assert_eq!(cmd.stdout, "".as_bytes());
     assert_eq!(cmd.stderr, output.as_bytes());
+}
 
-    /*
-     * No checksum type recorded.
-     */
+/*
+ * No checksum type recorded.
+ */
+#[test]
+fn test_checksum_no_checksum() {
+    let mut distinfo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    distinfo.push("tests/data/distinfo");
     let output = "checksum: No SHA1 checksum recorded for digest1.txt\n";
-    let cmd = Command::new(mktool)
+    let cmd = Command::new(MKTOOL)
         .arg("checksum")
         .arg("-a")
         .arg("SHA1")
@@ -199,70 +225,79 @@ fn test_checksum() {
         .arg("digest1.txt")
         .current_dir("tests/data")
         .output()
-        .expect("unable to spawn {mktool}");
+        .expect("unable to spawn {MKTOOL}");
     assert_eq!(cmd.status.code(), Some(2));
     assert_eq!(cmd.stdout, "".as_bytes());
     assert_eq!(cmd.stderr, output.as_bytes());
+}
 
-    /*
-     * Patch mode.
-     */
+/*
+ * Patch mode.
+ */
+#[test]
+fn test_checksum_patch_mode() {
+    let mut distinfo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    distinfo.push("tests/data/distinfo");
     let output = "=> Checksum SHA1 OK for patch-Makefile\n";
-    let cmd = Command::new(mktool)
+    let cmd = Command::new(MKTOOL)
         .arg("checksum")
         .arg("-p")
         .arg(distinfo.clone())
         .arg("patch-Makefile")
         .current_dir("tests/data")
         .output()
-        .expect("unable to spawn {mktool}");
+        .expect("unable to spawn {MKTOOL}");
     dbg!(&cmd);
     assert_eq!(cmd.status.code(), Some(0));
     assert_eq!(cmd.stdout, output.as_bytes());
     assert_eq!(cmd.stderr, "".as_bytes());
+}
 
-    /*
-     * Now run some of the same tests but with a bad distinfo file.
-     */
-    let mut bad_di = distinfo.clone();
-    bad_di.set_file_name("distinfo.bad");
+/*
+ * Now run some of the same tests but with a modified distinfo file containing
+ * invalid checksums.
+ */
+#[test]
+fn test_checksum_mismatch() {
+    let mut distinfo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    distinfo.push("tests/data/distinfo.bad");
 
     // Only the first checksum mismatch is printed on failure.
     let output = "checksum: Checksum BLAKE2s mismatch for digest1.txt\n";
-    let cmd = Command::new(mktool)
+    let cmd = Command::new(MKTOOL)
         .arg("checksum")
-        .arg(bad_di.clone())
+        .arg(distinfo.clone())
         .arg("digest1.txt")
         .current_dir("tests/data")
         .output()
-        .expect("unable to spawn {mktool}");
+        .expect("unable to spawn {MKTOOL}");
     assert_eq!(cmd.status.code(), Some(1));
     assert_eq!(cmd.stdout, "".as_bytes());
     assert_eq!(cmd.stderr, output.as_bytes());
 
     let output = "checksum: Checksum SHA512 mismatch for digest1.txt\n";
-    let cmd = Command::new(mktool)
+    let cmd = Command::new(MKTOOL)
         .arg("checksum")
         .arg("-a")
         .arg("SHA512")
-        .arg(bad_di.clone())
+        .arg(distinfo.clone())
         .arg("digest1.txt")
         .current_dir("tests/data")
         .output()
-        .expect("unable to spawn {mktool}");
+        .expect("unable to spawn {MKTOOL}");
     assert_eq!(cmd.status.code(), Some(1));
     assert_eq!(cmd.stdout, "".as_bytes());
     assert_eq!(cmd.stderr, output.as_bytes());
 
     let output = "checksum: Checksum SHA1 mismatch for patch-Makefile\n";
-    let cmd = Command::new(mktool)
+    let cmd = Command::new(MKTOOL)
         .arg("checksum")
         .arg("-p")
-        .arg(bad_di.clone())
+        .arg(distinfo.clone())
         .arg("patch-Makefile")
         .current_dir("tests/data")
         .output()
-        .expect("unable to spawn {mktool}");
+        .expect("unable to spawn {MKTOOL}");
     assert_eq!(cmd.status.code(), Some(1));
     assert_eq!(cmd.stdout, "".as_bytes());
     assert_eq!(cmd.stderr, output.as_bytes());
