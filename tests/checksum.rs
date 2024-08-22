@@ -129,6 +129,26 @@ fn test_checksum() {
     assert_eq!(cmd.stderr, "".as_bytes());
 
     /*
+     * Output should be in distinfo order, regardless of order of command
+     * line arguments.
+     */
+    let mut output = String::from("=> Checksum BLAKE2s OK for digest1.txt\n");
+    output.push_str("=> Checksum SHA512 OK for digest1.txt\n");
+    output.push_str("=> Checksum BLAKE2s OK for digest2.txt\n");
+    output.push_str("=> Checksum SHA512 OK for digest2.txt\n");
+    let cmd = Command::new(mktool)
+        .arg("checksum")
+        .arg(distinfo.clone())
+        .arg("digest2.txt")
+        .arg("digest1.txt")
+        .current_dir("tests/data")
+        .output()
+        .expect("unable to spawn {mktool}");
+    assert_eq!(cmd.status.code(), Some(0));
+    assert_eq!(cmd.stdout, output.as_bytes());
+    assert_eq!(cmd.stderr, "".as_bytes());
+
+    /*
      * Test strip suffix mode.  Use filename digest1.txt.suffix but validate
      * against the digest1.txt distinfo entry.
      */
