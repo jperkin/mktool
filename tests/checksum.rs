@@ -99,7 +99,8 @@ fn test_checksum_bad_distfile() {
 fn test_checksum_valid_distfile() {
     let mut distinfo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     distinfo.push("tests/data/distinfo");
-    let output = format!("{}\n{}\n",
+    let output = format!(
+        "{}\n{}\n",
         "=> Checksum BLAKE2s OK for digest1.txt",
         "=> Checksum SHA512 OK for digest1.txt"
     );
@@ -149,7 +150,8 @@ fn test_checksum_valid_distfile() {
      * Output should be in distinfo order, with errors last, regardless of
      * order of command line arguments.
      */
-    let output = format!("{}\n{}\n{}\n{}\n",
+    let output = format!(
+        "{}\n{}\n{}\n{}\n",
         "=> Checksum BLAKE2s OK for digest1.txt",
         "=> Checksum SHA512 OK for digest1.txt",
         "=> Checksum BLAKE2s OK for digest2.txt",
