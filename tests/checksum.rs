@@ -31,7 +31,7 @@ fn test_checksum_invalid_args() {
     let cmd = Command::new(MKTOOL)
         .arg("checksum")
         .output()
-        .expect("unable to spawn {MKTOOL}");
+        .expect(format!("unable to spawn {}", MKTOOL).as_str());
     assert_eq!(cmd.status.code(), Some(2));
 }
 
@@ -46,7 +46,7 @@ fn test_checksum_no_input() {
         .arg("checksum")
         .arg(distinfo)
         .output()
-        .expect("unable to spawn {MKTOOL}");
+        .expect(format!("unable to spawn {}", MKTOOL).as_str());
     assert_eq!(cmd.status.code(), Some(0));
     assert_eq!(cmd.stdout, "".as_bytes());
     assert_eq!(cmd.stderr, "".as_bytes());
@@ -64,7 +64,7 @@ fn test_checksum_bad_distinfo() {
         .arg("checksum")
         .arg(distinfo)
         .output()
-        .expect("unable to spawn {MKTOOL}");
+        .expect(format!("unable to spawn {}", MKTOOL).as_str());
     assert_eq!(cmd.status.code(), Some(3));
     assert_eq!(cmd.stdout, "".as_bytes());
     assert_eq!(cmd.stderr, output.as_bytes());
@@ -83,7 +83,7 @@ fn test_checksum_bad_distfile() {
         .arg(distinfo.clone())
         .arg("foo")
         .output()
-        .expect("unable to spawn {MKTOOL}");
+        .expect(format!("unable to spawn {}", MKTOOL).as_str());
     assert_eq!(cmd.status.code(), Some(2));
     assert_eq!(cmd.stdout, "".as_bytes());
     assert_eq!(
@@ -108,7 +108,7 @@ fn test_checksum_valid_distfile() {
         .arg("digest1.txt")
         .current_dir("tests/data")
         .output()
-        .expect("unable to spawn {MKTOOL}");
+        .expect(format!("unable to spawn {}", MKTOOL).as_str());
     assert_eq!(cmd.status.code(), Some(0));
     assert_eq!(cmd.stdout, output.as_bytes());
     assert_eq!(cmd.stderr, "".as_bytes());
@@ -125,7 +125,7 @@ fn test_checksum_valid_distfile() {
         .arg("digest1.txt")
         .current_dir("tests/data")
         .output()
-        .expect("unable to spawn {MKTOOL}");
+        .expect(format!("unable to spawn {}", MKTOOL).as_str());
     assert_eq!(cmd.status.code(), Some(0));
     assert_eq!(cmd.stdout, output.as_bytes());
     assert_eq!(cmd.stderr, "".as_bytes());
@@ -139,7 +139,7 @@ fn test_checksum_valid_distfile() {
         .arg("digest2.txt")
         .current_dir("tests/data")
         .output()
-        .expect("unable to spawn {MKTOOL}");
+        .expect(format!("unable to spawn {}", MKTOOL).as_str());
     assert_eq!(cmd.status.code(), Some(0));
     assert_eq!(cmd.stdout, output.as_bytes());
     assert_eq!(cmd.stderr, "".as_bytes());
@@ -162,7 +162,7 @@ fn test_checksum_valid_distfile() {
         .arg("digest1.txt")
         .current_dir("tests/data")
         .output()
-        .expect("unable to spawn {MKTOOL}");
+        .expect(format!("unable to spawn {}", MKTOOL).as_str());
     assert_eq!(cmd.status.code(), Some(2));
     assert_eq!(cmd.stdout, output.as_bytes());
     assert_eq!(cmd.stderr, outerr.as_bytes());
@@ -188,7 +188,7 @@ fn test_checksum_strip_mode() {
         .arg("digest1.txt.suffix")
         .current_dir("tests/data")
         .output()
-        .expect("unable to spawn {MKTOOL}");
+        .expect(format!("unable to spawn {}", MKTOOL).as_str());
     assert_eq!(cmd.status.code(), Some(0));
     assert_eq!(cmd.stdout, output.as_bytes());
     assert_eq!(cmd.stderr, "".as_bytes());
@@ -203,7 +203,7 @@ fn test_checksum_strip_mode() {
         .arg("digest1.txt.suffix")
         .current_dir("tests/data")
         .output()
-        .expect("unable to spawn {MKTOOL}");
+        .expect(format!("unable to spawn {}", MKTOOL).as_str());
     assert_eq!(cmd.status.code(), Some(2));
     assert_eq!(cmd.stdout, "".as_bytes());
     assert_eq!(cmd.stderr, output.as_bytes());
@@ -225,7 +225,7 @@ fn test_checksum_no_checksum() {
         .arg("digest1.txt")
         .current_dir("tests/data")
         .output()
-        .expect("unable to spawn {MKTOOL}");
+        .expect(format!("unable to spawn {}", MKTOOL).as_str());
     assert_eq!(cmd.status.code(), Some(2));
     assert_eq!(cmd.stdout, "".as_bytes());
     assert_eq!(cmd.stderr, output.as_bytes());
@@ -246,7 +246,7 @@ fn test_checksum_patch_mode() {
         .arg("patch-Makefile")
         .current_dir("tests/data")
         .output()
-        .expect("unable to spawn {MKTOOL}");
+        .expect(format!("unable to spawn {}", MKTOOL).as_str());
     dbg!(&cmd);
     assert_eq!(cmd.status.code(), Some(0));
     assert_eq!(cmd.stdout, output.as_bytes());
@@ -270,7 +270,7 @@ fn test_checksum_mismatch() {
         .arg("digest1.txt")
         .current_dir("tests/data")
         .output()
-        .expect("unable to spawn {MKTOOL}");
+        .expect(format!("unable to spawn {}", MKTOOL).as_str());
     assert_eq!(cmd.status.code(), Some(1));
     assert_eq!(cmd.stdout, "".as_bytes());
     assert_eq!(cmd.stderr, output.as_bytes());
@@ -284,7 +284,7 @@ fn test_checksum_mismatch() {
         .arg("digest1.txt")
         .current_dir("tests/data")
         .output()
-        .expect("unable to spawn {MKTOOL}");
+        .expect(format!("unable to spawn {}", MKTOOL).as_str());
     assert_eq!(cmd.status.code(), Some(1));
     assert_eq!(cmd.stdout, "".as_bytes());
     assert_eq!(cmd.stderr, output.as_bytes());
@@ -297,7 +297,7 @@ fn test_checksum_mismatch() {
         .arg("patch-Makefile")
         .current_dir("tests/data")
         .output()
-        .expect("unable to spawn {MKTOOL}");
+        .expect(format!("unable to spawn {}", MKTOOL).as_str());
     assert_eq!(cmd.status.code(), Some(1));
     assert_eq!(cmd.stdout, "".as_bytes());
     assert_eq!(cmd.stderr, output.as_bytes());
