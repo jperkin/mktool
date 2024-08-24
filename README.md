@@ -17,6 +17,7 @@ when running in www/grafana on a 32-core SmartOS host:
 |-----------------:|------------------------:|------------:|---------:|
 | `bmake checksum` |              10 seconds |   2 seconds |   **5x** |
 | `bmake distinfo` |   3 minutes, 30 seconds |   2 seconds | **100x** |
+|    `bmake fetch` |  47 minutes, 58 seconds |   5 seconds | **500x** |
 
 As pkgsrc strives to be as portable as possible, at no point will any of the
 commands implemented by `mktool` become mandatory.  This tool simply exists
@@ -55,3 +56,13 @@ A replacement for
 
 A replacement for
 [pkgsrc/mk/checksum/distinfo.awk](https://github.com/NetBSD/pkgsrc/blob/trunk/mk/checksum/distinfo.awk)
+
+### fetch
+
+A replacement for
+[pkgsrc/mk/fetch/fetch](https://github.com/NetBSD/pkgsrc/blob/trunk/mk/fetch/fetch)
+
+### symlinks
+
+A replacement for the `mk-buildlink-symlinks` utility provided by
+[pkgsrc/pkgtools/mktools](https://github.com/NetBSD/pkgsrc/blob/trunk/pkgtools/mktools/files/mk-buildlink-symlinks.c)
