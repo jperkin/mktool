@@ -285,7 +285,7 @@ fn test_distinfo_input_file() {
     let mut distinfo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     distinfo.push("tests/data/distinfo");
     let diout = fs::read(distinfo).expect("unable to read distinfo");
-    let tmpdir: PathBuf = env::temp_dir();
+    let tmpdir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"));
     let tmpfile = tmpdir.join("test_distinfo_input_file.txt");
     fs::write(&tmpfile, "digest2.txt\ndigest1.txt\n")
         .expect("unable to write temp file");

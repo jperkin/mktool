@@ -181,7 +181,7 @@ fn test_checksum_valid_distfile() {
 fn test_checksum_input_file() {
     let mut distinfo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     distinfo.push("tests/data/distinfo");
-    let tmpdir: PathBuf = env::temp_dir();
+    let tmpdir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"));
     let tmpfile = tmpdir.join("test_checksum_input_file.txt");
     fs::write(&tmpfile, "digest2.txt\n").expect("unable to write temp file");
     let output = format!(
