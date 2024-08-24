@@ -198,14 +198,12 @@ fn test_checksum_input_file() {
         .arg(&tmpfile)
         .arg("digest1.txt")
         .current_dir("tests/data")
-        .stdout(Stdio::piped())
-        .spawn()
+        .output()
         .expect(format!("unable to spawn {}", MKTOOL).as_str());
-    let out = cmd.wait_with_output().expect("failed to wait on child");
     fs::remove_file(&tmpfile).expect("unable to remove temp file");
-    assert_eq!(out.status.code(), Some(0));
-    assert_eq!(out.stdout, output.as_bytes());
-    assert_eq!(out.stderr, "".as_bytes());
+    assert_eq!(cmd.status.code(), Some(0));
+    assert_eq!(cmd.stdout, output.as_bytes());
+    assert_eq!(cmd.stderr, "".as_bytes());
 }
 
 #[test]
