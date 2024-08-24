@@ -16,8 +16,9 @@
 
 use std::env;
 use std::fs;
+use std::io::Write;
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 const MKTOOL: &str = env!("CARGO_BIN_EXE_mktool");
 
@@ -216,6 +217,72 @@ fn test_distinfo_distfiles_with_distinfo() {
     assert_eq!(cmd.status.code(), Some(0));
     assert_eq!(cmd.stdout, diout);
     assert_eq!(cmd.stderr, "".as_bytes());
+}
+
+/*
+ * Test input from file / stdin.
+ */
+#[test]
+fn test_distinfo_input_file() {
+    let mut distinfo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    distinfo.push("tests/data/distinfo");
+    let diout = fs::read(distinfo).expect("unable to read distinfo");
+    let tmpdir: PathBuf = env::temp_dir();
+    let tmpfile = tmpdir.join("test_distinfo_input_file.txt");
+    fs::write(&tmpfile, "digest2.txt\ndigest1.txt\n")
+        .expect("unable to write temp file");
+
+    let cmd = Command::new(MKTOOL)
+        .arg("distinfo")
+        .arg("-a")
+        .arg("BLAKE2s")
+        .arg("-a")
+        .arg("SHA512")
+        .arg("-I")
+        .arg(&tmpfile)
+        .arg("-f")
+        .arg("distinfo")
+        .current_dir("tests/data")
+        .output()
+        .expect(format!("unable to spawn {}", MKTOOL).as_str());
+    fs::remove_file(&tmpfile).expect("unable to remove temp file");
+    assert_eq!(cmd.status.code(), Some(0));
+    assert_eq!(cmd.stdout, diout);
+    assert_eq!(cmd.stderr, "".as_bytes());
+}
+
+#[test]
+fn test_distinfo_input_stdin() {
+    let mut distinfo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    distinfo.push("tests/data/distinfo");
+    let diout = fs::read(distinfo).expect("unable to read distinfo");
+
+    let mut cmd = Command::new(MKTOOL)
+        .arg("distinfo")
+        .arg("-a")
+        .arg("BLAKE2s")
+        .arg("-a")
+        .arg("SHA512")
+        .arg("-I")
+        .arg("-")
+        .arg("-f")
+        .arg("distinfo")
+        .current_dir("tests/data")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect(format!("unable to spawn {}", MKTOOL).as_str());
+    let mut stdin = cmd.stdin.take().expect("failed to open stdin");
+    std::thread::spawn(move || {
+        stdin
+            .write_all("digest1.txt\ndigest2.txt\n".as_bytes())
+            .expect("failed to write to stdin");
+    });
+    let out = cmd.wait_with_output().expect("failed to wait on child");
+
+    assert_eq!(out.status.code(), Some(0));
+    assert_eq!(out.stdout, diout);
+    assert_eq!(out.stderr, "".as_bytes());
 }
 
 /*
