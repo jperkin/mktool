@@ -96,6 +96,8 @@ pub struct Distfile {
      * Filename entry in the distinfo file.  Note that this may be different
      * to that used in [`filepath`], as there is support for strip-suffix mode
      * where e.g. foo.tar.gz.download can be compared against foo.tar.gz.
+     *
+     * [`filepath`]: Distfile::filepath
      */
     pub filename: PathBuf,
     /**
