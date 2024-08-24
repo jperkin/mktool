@@ -1,17 +1,17 @@
 # mktool
 
-This is intended to be a collection of utilities to replace parts of
-[pkgsrc](https://github.com/NetBSD/pkgsrc/)'s mk infrastructure.
+This is a collection of utilities that provide alternate implementations for
+parts of the [pkgsrc](https://github.com/NetBSD/pkgsrc/) mk infrastructure.
 
-Many targets under `mk/` are implemented using a combination of shell and
-awk, and can suffer from a lack of performance, especially when input sizes
-grow.
+Many targets under `pkgsrc/mk` are implemented using a combination of shell
+and awk, and can suffer from a lack of performance, especially when input
+sizes grow.
 
 For example, with the profligation of Go modules used in newer Go software,
-www/grafana now has over 5,000 distfiles.  This exposes various issues in
-the current pkgsrc checksum scripts that are hard to work around.  This
-tool implements replacements with the following performance improvements
-when running in www/grafana on a 32-core SmartOS host:
+www/grafana now has over 5,000 distfiles.  This exposes various issues in the
+current pkgsrc scripts that are difficult to work around.  This tool
+implements replacements with the following performance improvements when
+running in www/grafana on a 32-core SmartOS host:
 
 |          Command | Existing pkgsrc scripts |      mktool |  Speedup |
 |-----------------:|------------------------:|------------:|---------:|
@@ -38,10 +38,10 @@ and add to `mk.conf`:
 TOOLS_PLATFORM.mktool=  ${HOME}/.cargo/bin/mktool
 ```
 
-You will also need to apply the changes to pkgsrc.  The changes are [here]
-(https://github.com/NetBSD/pkgsrc/compare/trunk...TritonDataCenter:pkgsrc:dev/mktool)
-and you can get them all as a single patch file [here]
-(https://github.com/NetBSD/pkgsrc/compare/trunk...TritonDataCenter:pkgsrc:dev/mktool.patch)
+You will also need to apply the changes to pkgsrc.  The changes are in the
+[dev/mktool](https://github.com/NetBSD/pkgsrc/compare/trunk...TritonDataCenter:pkgsrc:dev/mktool)
+branch, and you can get them all as a single patch file
+[here](https://github.com/NetBSD/pkgsrc/compare/trunk...TritonDataCenter:pkgsrc:dev/mktool.patch)
 
 ## Commands
 
