@@ -40,11 +40,8 @@ fn test_distinfo_no_args() {
 
 /*
  * With a valid distinfo but no files it should print nothing.
- *
- * XXX: currently incorrect, so ignored.
  */
 #[test]
-#[ignore]
 fn test_distinfo_just_distinfo() {
     let mut distinfo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     distinfo.push("tests/data/distinfo");

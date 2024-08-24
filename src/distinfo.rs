@@ -388,6 +388,15 @@ impl DistInfo {
             .collect();
 
         /*
+         * Special case to match distinfo.awk behaviour.  If we were passed a
+         * valid distinfo file (already tested earlier) but no input files,
+         * then exit 1 with no output.
+         */
+        if inputfiles.is_empty() && self.distinfo.is_some() {
+            return Ok(1);
+        }
+
+        /*
          * We have all the data we need.  Start constructing our output.
          */
         let mut output: Vec<u8> = vec![];
