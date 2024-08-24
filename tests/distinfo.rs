@@ -62,6 +62,35 @@ fn test_distinfo_just_distinfo() {
 }
 
 /*
+ * Invalid distdir / distinfo.
+ */
+#[test]
+fn test_distinfo_invalid_distdir() {
+    let cmd = Command::new(MKTOOL)
+        .arg("distinfo")
+        .arg("-d")
+        .arg("/nonexistent")
+        .output()
+        .expect(format!("unable to spawn {}", MKTOOL).as_str());
+    assert_eq!(cmd.status.code(), Some(128));
+    assert_eq!(cmd.stdout, "".as_bytes());
+    assert!(cmd.stderr.starts_with(b"ERROR: Supplied DISTDIR"));
+}
+
+#[test]
+fn test_distinfo_invalid_distinfo() {
+    let cmd = Command::new(MKTOOL)
+        .arg("distinfo")
+        .arg("-f")
+        .arg("/nonexistent")
+        .output()
+        .expect(format!("unable to spawn {}", MKTOOL).as_str());
+    assert_eq!(cmd.status.code(), Some(128));
+    assert_eq!(cmd.stdout, "".as_bytes());
+    assert!(cmd.stderr.starts_with(b"ERROR: Could not open distinfo"));
+}
+
+/*
  * Specify a distfile but no checksums, should only print size (and retain
  * existing patch entries).
  */
