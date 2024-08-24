@@ -16,11 +16,12 @@
 
 use clap::Args;
 use pkgsrc::digest::Digest;
-use pkgsrc::distinfo::{Checksum, Entry};
+use pkgsrc::distinfo::{Checksum, Distinfo, Entry};
 use std::env;
 use std::fs;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Write};
+use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
@@ -140,14 +141,6 @@ impl Distfile {
 impl DistInfo {
     pub fn run(&self) -> Result<i32, Box<dyn std::error::Error>> {
         /*
-         * Store input "distinfo" and output as u8 vecs.  These are compared at
-         * the end to determine the exit status (0 if no change, 1 if new or
-         * changed.
-         */
-        let mut input: Vec<u8> = vec![];
-        let mut output: Vec<u8> = vec![];
-
-        /*
          * Check for valid distdir, exit early with a compatible exit code if
          * not.
          */
@@ -160,13 +153,13 @@ impl DistInfo {
         }
 
         /*
-         * Read existing distinfo file if specified.  Any $NetBSD$ header is
-         * retained.
+         * Read existing distinfo file if specified.
          */
+        let mut distinfo = Distinfo::new();
         if let Some(di) = &self.distinfo {
             /* If distinfo was specified then it must exist. */
             match fs::read(di) {
-                Ok(s) => input = s,
+                Ok(s) => distinfo = Distinfo::from_bytes(&s),
                 Err(e) => {
                     eprintln!(
                         "ERROR: Could not open distinfo '{}': {}",
@@ -176,33 +169,10 @@ impl DistInfo {
                     return Ok(128);
                 }
             }
-            if let Some(first) = input.lines().nth(0) {
-                let first = first?;
-                if first.starts_with("$NetBSD") {
-                    output.extend_from_slice(first.as_bytes());
-                    output.extend_from_slice("\n".as_bytes());
-                }
-            }
         }
 
         /*
-         * Add $NetBSD$ header if there isn't one already, and blank line
-         * before starting checksums.
-         */
-        if output.is_empty() {
-            output.extend_from_slice("$NetBSD$\n".as_bytes());
-        }
-        output.extend_from_slice("\n".as_bytes());
-
-        /*
-         * On the first pass all of the supplied files (whether distfiles or
-         * patchfiles) are added to a Vec of Distfile's, along with the
-         * algorithms to be calculated for each.
-         */
-        let mut distinfo: Vec<Distfile> = vec![];
-
-        /*
-         * Create a hashes vec that we can clone for each distinfo entry.
+         * Create hashes vecs that we can clone for each distfile or patchfile.
          */
         let mut d_hashes: Vec<Checksum> = vec![];
         for a in &self.dalgorithms {
@@ -213,6 +183,21 @@ impl DistInfo {
             };
             d_hashes.push(he);
         }
+        let mut p_hashes: Vec<Checksum> = vec![];
+        for a in &self.palgorithms {
+            let d = Digest::from_str(a)?;
+            let he = Checksum {
+                digest: d,
+                hash: String::new(),
+            };
+            p_hashes.push(he);
+        }
+
+        /*
+         * Collect all of the input files and what algorithms are to be
+         * computed for them.
+         */
+        let mut inputfiles: Vec<Distfile> = vec![];
 
         /*
          * Add files specified by -c.
@@ -247,7 +232,7 @@ impl DistInfo {
                     entry: e,
                     ..Default::default()
                 };
-                distinfo.push(n);
+                inputfiles.push(n);
             }
         }
 
@@ -293,44 +278,9 @@ impl DistInfo {
                         entry: e,
                         ..Default::default()
                     };
-                    distinfo.push(n);
+                    inputfiles.push(n);
                 }
             }
-        }
-
-        /*
-         * If we weren't passed any distfiles, but there are entries in an
-         * existing distinfo, then they need to be retained.  This is how
-         * "makepatchsum" operates, by just operating on patch files and
-         * keeping any file entries.
-         */
-        if distinfo.is_empty() {
-            for (i, line) in input.lines().enumerate() {
-                // Skip $NetBSD$ and blank line
-                if i < 2 {
-                    continue;
-                }
-                let line = line?;
-                let s = line.split(&['(', ')']).collect::<Vec<_>>();
-                if s.len() == 3 && is_patchfile(s[1]).is_none() {
-                    output.extend_from_slice(line.as_bytes());
-                    output.extend_from_slice("\n".as_bytes());
-                }
-            }
-        }
-
-        /*
-         * Create a hashes Vec based on the requested algorithms from the
-         * command line argument that we can clone for each patchfile entry.
-         */
-        let mut p_hashes: Vec<Checksum> = vec![];
-        for a in &self.palgorithms {
-            let d = Digest::from_str(a)?;
-            let he = Checksum {
-                digest: d,
-                hash: String::new(),
-            };
-            p_hashes.push(he);
         }
 
         /*
@@ -349,16 +299,15 @@ impl DistInfo {
                     entry: e,
                     ..Default::default()
                 };
-                distinfo.push(n);
+                inputfiles.push(n);
             }
         }
 
         /*
-         * Order the Vec so that distfiles come first, followed by patches,
-         * and hashes for each are ordered by how they were specified on the
-         * command line.
+         * Order all of the input files alphabetically.  Distfiles and
+         * patchfiles will be separated later.
          */
-        distinfo.sort_by(|a, b| a.filepath.cmp(&b.filepath));
+        inputfiles.sort_by(|a, b| a.filepath.cmp(&b.filepath));
 
         /*
          * Now set up parallel processing of the Vec.
@@ -375,9 +324,9 @@ impl DistInfo {
         };
 
         /*
-         * Wrap each distinfo entry in its own Mutex.
+         * Wrap each distfile entry in its own Mutex.
          */
-        let distinfo: Vec<_> = distinfo
+        let inputfiles: Vec<_> = inputfiles
             .into_iter()
             .map(|s| Arc::new(Mutex::new(s)))
             .collect();
@@ -387,7 +336,7 @@ impl DistInfo {
          * in the Vec, which stores the resulting hashes (and optional size)
          * back into the entry.
          */
-        for d in &distinfo {
+        for d in &inputfiles {
             let active_threads = Arc::clone(&active_threads);
             let d = Arc::clone(d);
             loop {
@@ -417,9 +366,9 @@ impl DistInfo {
 
         /*
          * Now that we're done processing, unwrap back to a plain Vec for
-         * simpler access.
+         * simpler access, and set up separate distfile and patchfile vecs.
          */
-        let distinfo: Vec<_> = distinfo
+        let inputfiles: Vec<_> = inputfiles
             .into_iter()
             .map(|arc_mutex| {
                 Arc::try_unwrap(arc_mutex)
@@ -429,46 +378,60 @@ impl DistInfo {
                     .unwrap()
             })
             .collect();
-
-        /*
-         * Write distfiles.
-         */
-        for distfile in distinfo
+        let distfiles: Vec<_> = inputfiles
             .iter()
             .filter(|&d| d.filetype == DistInfoType::Distfile)
-        {
-            let f = distfile.filepath.strip_prefix(&self.distdir)?;
-            for h in &distfile.entry.checksums {
-                output.extend_from_slice(
-                    format!("{} ({}) = {}\n", h.digest, f.display(), h.hash,)
-                        .as_bytes(),
-                );
-            }
-            if let Some(size) = distfile.entry.size {
-                output.extend_from_slice(
-                    format!("Size ({}) = {} bytes\n", f.display(), size)
-                        .as_bytes(),
-                );
-            }
-        }
-
-        /*
-         * Write patches.
-         */
-        for patchfile in distinfo
+            .collect();
+        let patchfiles: Vec<_> = inputfiles
             .iter()
             .filter(|&d| d.filetype == DistInfoType::Patch)
-        {
-            for h in &patchfile.entry.checksums {
-                output.extend_from_slice(
-                    format!(
-                        "{} ({}) = {}\n",
-                        h.digest,
-                        patchfile.entry.filename.display(),
-                        h.hash,
-                    )
-                    .as_bytes(),
-                );
+            .collect();
+
+        /*
+         * We have all the data we need.  Start constructing our output.
+         */
+        let mut output: Vec<u8> = vec![];
+
+        /*
+         * Add $NetBSD$ header if there isn't one already, and blank line
+         * before starting checksums.
+         */
+        match distinfo.rcsid() {
+            Some(s) => output.extend_from_slice(s.as_bytes()),
+            None => output.extend_from_slice("$NetBSD$".as_bytes()),
+        };
+        output.extend_from_slice("\n\n".as_bytes());
+
+        /*
+         * If we weren't passed any distfiles, but there are entries in an
+         * existing distinfo, then they need to be retained.  This is how
+         * "makepatchsum" operates, by just operating on patch files and
+         * keeping any file entries.
+         */
+        if distfiles.is_empty() {
+            for f in distinfo.files() {
+                output.extend_from_slice(&f.as_bytes());
+            }
+        } else {
+            for distfile in distfiles {
+                let f = distfile.filepath.strip_prefix(&self.distdir)?;
+                for h in &distfile.entry.checksums {
+                    output.extend_from_slice(
+                        format!(
+                            "{} ({}) = {}\n",
+                            h.digest,
+                            f.display(),
+                            h.hash,
+                        )
+                        .as_bytes(),
+                    );
+                }
+                if let Some(size) = distfile.entry.size {
+                    output.extend_from_slice(
+                        format!("Size ({}) = {} bytes\n", f.display(), size)
+                            .as_bytes(),
+                    );
+                }
             }
         }
 
@@ -478,17 +441,22 @@ impl DistInfo {
          * "makesum" operates, by just operating on distfiles and
          * keeping any patch entries.
          */
-        if self.patchfiles.is_empty() {
-            for (i, line) in input.lines().enumerate() {
-                // Skip $NetBSD$ and blank line
-                if i < 2 {
-                    continue;
-                }
-                let line = line?;
-                let s = line.split(&['(', ')']).collect::<Vec<_>>();
-                if s.len() == 3 && is_patchfile(s[1]).is_some() {
-                    output.extend_from_slice(line.as_bytes());
-                    output.extend_from_slice("\n".as_bytes());
+        if patchfiles.is_empty() {
+            for p in distinfo.patches() {
+                output.extend_from_slice(&p.as_bytes());
+            }
+        } else {
+            for patchfile in patchfiles {
+                for h in &patchfile.entry.checksums {
+                    output.extend_from_slice(
+                        format!(
+                            "{} ({}) = {}\n",
+                            h.digest,
+                            patchfile.entry.filename.display(),
+                            h.hash,
+                        )
+                        .as_bytes(),
+                    );
                 }
             }
         }
@@ -503,7 +471,7 @@ impl DistInfo {
         /*
          * Return exit code based on whether there were changes or not.
          */
-        if input == output {
+        if !inputfiles.is_empty() && distinfo.as_bytes() == output {
             Ok(0)
         } else {
             Ok(1)
