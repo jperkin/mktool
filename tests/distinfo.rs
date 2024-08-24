@@ -249,6 +249,38 @@ fn test_distinfo_distfiles_with_distinfo() {
 }
 
 /*
+ * Digest algorithms should be output in command line order.
+ */
+#[test]
+fn test_distinfo_algorithm_order() {
+    let cmd = Command::new(MKTOOL)
+        .arg("distinfo")
+        .arg("-a")
+        .arg("SHA512")
+        .arg("-a")
+        .arg("BLAKE2s")
+        .arg("-c")
+        .arg("digest1.txt")
+        .arg("-p")
+        .arg("RMD160")
+        .arg("-p")
+        .arg("SHA1")
+        .arg("patch-Makefile")
+        .current_dir("tests/data")
+        .output()
+        .expect(format!("unable to spawn {}", MKTOOL).as_str());
+    let mut outlines = cmd.stdout.split(|c| *c == b'\n');
+    assert_eq!(cmd.status.code(), Some(1));
+    // Remember that .nth() consumes previous entries...
+    assert!(outlines.nth(0).unwrap().starts_with(b"$NetBSD"));
+    assert!(outlines.nth(1).unwrap().starts_with(b"SHA512"));
+    assert!(outlines.nth(0).unwrap().starts_with(b"BLAKE2s"));
+    assert!(outlines.nth(1).unwrap().starts_with(b"RMD160"));
+    assert!(outlines.nth(0).unwrap().starts_with(b"SHA1"));
+    assert_eq!(cmd.stderr, "".as_bytes());
+}
+
+/*
  * Test input from file / stdin.
  */
 #[test]
