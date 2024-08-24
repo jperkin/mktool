@@ -17,6 +17,7 @@
 mod checksum;
 mod distinfo;
 mod fetch;
+mod symlinks;
 
 use clap::{Parser, Subcommand};
 
@@ -40,6 +41,8 @@ enum Commands {
     DistInfo(distinfo::DistInfo),
     /// Fetch distfiles.
     Fetch(fetch::Fetch),
+    /// Create symlinks.
+    Symlinks(symlinks::Symlinks),
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -49,6 +52,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Commands::CheckSum(cmd) => cmd.run()?,
         Commands::DistInfo(cmd) => cmd.run()?,
         Commands::Fetch(cmd) => cmd.run()?,
+        Commands::Symlinks(cmd) => cmd.run()?,
     };
 
     std::process::exit(rv);
