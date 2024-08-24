@@ -8,10 +8,10 @@ and awk, and can suffer from a lack of performance, especially when input
 sizes grow.
 
 For example, with the profligation of Go modules used in newer Go software,
-www/grafana now has over 5,000 distfiles.  This exposes various issues in the
-current pkgsrc scripts that are difficult to work around.  This tool
+`www/grafana` now has over 5,000 distfiles.  This exposes various issues in
+the current pkgsrc scripts that are difficult to work around.  This tool
 implements replacements with the following performance improvements when
-running in www/grafana on a 32-core SmartOS host:
+running in `www/grafana` on a 32-core SmartOS host:
 
 |          Command | Existing pkgsrc scripts |      mktool |  Speedup |
 |-----------------:|------------------------:|------------:|---------:|
@@ -29,10 +29,10 @@ performance.
 Install using `cargo`:
 
 ```shell
-cargo install mktool
+$ cargo install mktool
 ```
 
-and add to `mk.conf`:
+and add the following to `mk.conf`:
 
 ```make
 TOOLS_PLATFORM.mktool=  ${HOME}/.cargo/bin/mktool
@@ -41,7 +41,7 @@ TOOLS_PLATFORM.mktool=  ${HOME}/.cargo/bin/mktool
 You will also need to apply the changes to pkgsrc.  The changes are in the
 [dev/mktool](https://github.com/NetBSD/pkgsrc/compare/trunk...TritonDataCenter:pkgsrc:dev/mktool)
 branch, and you can get them all as a single patch file
-[here](https://github.com/NetBSD/pkgsrc/compare/trunk...TritonDataCenter:pkgsrc:dev/mktool.patch)
+[here](https://github.com/NetBSD/pkgsrc/compare/trunk...TritonDataCenter:pkgsrc:dev/mktool.patch).
 
 ## Commands
 
@@ -50,19 +50,19 @@ These are the commands currently implemented.
 ### checksum
 
 A replacement for
-[pkgsrc/mk/checksum/checksum.awk](https://github.com/NetBSD/pkgsrc/blob/trunk/mk/checksum/checksum.awk)
+[mk/checksum/checksum.awk](https://github.com/NetBSD/pkgsrc/blob/trunk/mk/checksum/checksum.awk).
 
 ### distinfo
 
 A replacement for
-[pkgsrc/mk/checksum/distinfo.awk](https://github.com/NetBSD/pkgsrc/blob/trunk/mk/checksum/distinfo.awk)
+[mk/checksum/distinfo.awk](https://github.com/NetBSD/pkgsrc/blob/trunk/mk/checksum/distinfo.awk).
 
 ### fetch
 
 A replacement for
-[pkgsrc/mk/fetch/fetch](https://github.com/NetBSD/pkgsrc/blob/trunk/mk/fetch/fetch)
+[mk/fetch/fetch](https://github.com/NetBSD/pkgsrc/blob/trunk/mk/fetch/fetch).
 
 ### symlinks
 
-A replacement for the `mk-buildlink-symlinks` utility provided by
-[pkgsrc/pkgtools/mktools](https://github.com/NetBSD/pkgsrc/blob/trunk/pkgtools/mktools/files/mk-buildlink-symlinks.c)
+A replacement for the `mk-buildlink-symlinks` tool provided by
+[pkgtools/mktools](https://github.com/NetBSD/pkgsrc/blob/trunk/pkgtools/mktools/files/mk-buildlink-symlinks.c).
