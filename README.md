@@ -38,10 +38,10 @@ and add to `mk.conf`:
 TOOLS_PLATFORM.mktool=  ${HOME}/.cargo/bin/mktool
 ```
 
-The hooks into the pkgsrc infrastructure are not yet committed.  Until then,
-you'll need to apply
-[`these changesets`](https://github.com/NetBSD/pkgsrc/compare/trunk...TritonDataCenter:pkgsrc:dev/mktool)
-manually.  These will hopefully be added soon once things are approved.
+You will also need to apply the changes to pkgsrc.  The changes are [here]
+(https://github.com/NetBSD/pkgsrc/compare/trunk...TritonDataCenter:pkgsrc:dev/mktool)
+and you can get them all as a single patch file [here]
+(https://github.com/NetBSD/pkgsrc/compare/trunk...TritonDataCenter:pkgsrc:dev/mktool.patch)
 
 ## Commands
 
