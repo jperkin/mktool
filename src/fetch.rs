@@ -213,6 +213,13 @@ fn fetch_and_verify(
     file_name.push(&file.filename);
 
     /*
+     * Create all necessary directories.
+     */
+    if let Some(dir) = file_name.parent() {
+        fs::create_dir_all(dir)?;
+    }
+
+    /*
      * There's no support for resume yet.  If the file already exists and
      * matches the correct size then assume it's ok (checksum will later
      * verify that it is), otherwise remove and retry.
