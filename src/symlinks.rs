@@ -27,31 +27,29 @@ impl Symlinks {
     pub fn run(&self) -> Result<i32, Box<dyn std::error::Error>> {
         for line in io::stdin().lock().lines() {
             let line = line?;
-            let mut p = line.split(" -> ");
-            if p.clone().count() != 2 {
+            let v: Vec<&str> = line.split(" -> ").collect();
+            if v.len() != 2 {
                 continue;
             }
-            if let (Some(l), Some(o)) = (p.next(), p.next()) {
-                let link = PathBuf::from(l.trim());
-                let original = PathBuf::from(o.trim());
-                /*
-                 * Create any parent directories required as part of the
-                 * target.
-                 */
-                if let Some(dir) = link.parent() {
-                    if dir.as_os_str() != "" {
-                        fs::create_dir_all(dir)?;
-                    }
+            let link = PathBuf::from(v[0].trim());
+            let original = PathBuf::from(v[1].trim());
+            /*
+             * Create any parent directories required as part of the
+             * target.
+             */
+            if let Some(dir) = link.parent() {
+                if dir.as_os_str() != "" {
+                    fs::create_dir_all(dir)?;
                 }
-                /*
-                 * Ignore errors, just try to remove the destination (we are
-                 * essentially operating like "ln -fs").  Ideally we'd just
-                 * ignore ENOENT, but we'll soon find out about other problems
-                 * when we try to create the link.
-                 */
-                let _ = fs::remove_file(&link);
-                unix::fs::symlink(original, link)?;
             }
+            /*
+             * Ignore errors, just try to remove the destination (we are
+             * essentially operating like "ln -fs").  Ideally we'd just
+             * ignore ENOENT, but we'll soon find out about other problems
+             * when we try to create the link.
+             */
+            let _ = fs::remove_file(&link);
+            unix::fs::symlink(original, link)?;
         }
         Ok(0)
     }
