@@ -38,31 +38,22 @@ and add the following to `mk.conf`:
 TOOLS_PLATFORM.mktool=  ${HOME}/.cargo/bin/mktool
 ```
 
-You will also need to apply the changes to pkgsrc.  The changes are in the
+You will also need to apply changes to pkgsrc.  The changes are in the
 [dev/mktool](https://github.com/NetBSD/pkgsrc/compare/trunk...TritonDataCenter:pkgsrc:dev/mktool)
 branch, and you can get them all as a single patch file
 [here](https://github.com/NetBSD/pkgsrc/compare/trunk...TritonDataCenter:pkgsrc:dev/mktool.patch).
 
 ## Commands
 
-These are the commands currently implemented.
+These are the commands currently implemented:
 
-### checksum
+|    Command | Replaces |
+|-----------:|---------:|
+| `checksum` | [mk/checksum/checksum.awk](https://github.com/NetBSD/pkgsrc/blob/trunk/mk/checksum/checksum.awk) |
+| `distinfo` | [mk/checksum/distinfo.awk](https://github.com/NetBSD/pkgsrc/blob/trunk/mk/checksum/distinfo.awk) |
+|    `fetch` | [mk/fetch/fetch](https://github.com/NetBSD/pkgsrc/blob/trunk/mk/fetch/fetch) |
+| `symlinks` | [pkgtools/mktools](https://github.com/NetBSD/pkgsrc/blob/trunk/pkgtools/mktools/files/mk-buildlink-symlinks.c) |
 
-A replacement for
-[mk/checksum/checksum.awk](https://github.com/NetBSD/pkgsrc/blob/trunk/mk/checksum/checksum.awk).
-
-### distinfo
-
-A replacement for
-[mk/checksum/distinfo.awk](https://github.com/NetBSD/pkgsrc/blob/trunk/mk/checksum/distinfo.awk).
-
-### fetch
-
-A replacement for
-[mk/fetch/fetch](https://github.com/NetBSD/pkgsrc/blob/trunk/mk/fetch/fetch).
-
-### symlinks
-
-A replacement for the `mk-buildlink-symlinks` tool provided by
-[pkgtools/mktools](https://github.com/NetBSD/pkgsrc/blob/trunk/pkgtools/mktools/files/mk-buildlink-symlinks.c).
+All of the replacements are activated upon setting `TOOLS_PLATFORM.mktool`.
+In addition, packages no longer have build dependencies on `pkgtools/digest`
+and `pkgtools/mktools` (unless specifically requested).
