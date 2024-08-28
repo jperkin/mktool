@@ -288,13 +288,18 @@ fn test_checksum_strip_mode() {
 fn test_checksum_no_checksum() {
     let mut distinfo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     distinfo.push("tests/data/distinfo");
-    let output = "checksum: No SHA1 checksum recorded for digest1.txt\n";
+    let output = format!(
+        "{}\n{}\n",
+        "checksum: No SHA1 checksum recorded for digest1.txt",
+        "checksum: No SHA1 checksum recorded for nonexistent.txt",
+    );
     let cmd = Command::new(MKTOOL)
         .arg("checksum")
         .arg("-a")
         .arg("SHA1")
         .arg(distinfo.clone())
         .arg("digest1.txt")
+        .arg("nonexistent.txt")
         .current_dir("tests/data")
         .output()
         .expect(format!("unable to exec {}", MKTOOL).as_str());
