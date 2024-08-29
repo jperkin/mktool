@@ -48,8 +48,9 @@ pub struct Fetch {
 
 #[derive(Clone, Debug)]
 struct FetchFile {
+    filepath: PathBuf,
     filename: String,
-    distdir: String,
+    distdir: PathBuf,
     sites: Vec<String>,
     status: bool,
 }
@@ -60,8 +61,8 @@ pub enum FetchError {
     Reqwest(#[from] reqwest::Error),
     #[error(transparent)]
     Io(#[from] io::Error),
-    #[error("Unable to fetch file: {0}")]
-    NotFound(String),
+    #[error("Unable to fetch file")]
+    NotFound,
 }
 
 impl Fetch {
@@ -87,22 +88,36 @@ impl Fetch {
                     std::process::exit(1);
                 }
             };
-            // filename distdir site ...
+            // filepath distdir site [site ...]
             for line in reader.lines() {
                 let line = line?;
-                if line.split_whitespace().count() < 3 {
+                let mut iter = line.split_whitespace();
+                if iter.clone().count() < 3 {
                     eprintln!("Invalid input: {}", line);
                     return Ok(1);
                 }
-                let mut line = line.split_whitespace();
-                let file = line.next().expect("").to_string();
-                let dir = line.next().expect("").to_string();
+                let filepath = PathBuf::from(iter.next().expect(""));
+                let distdir = PathBuf::from(iter.next().expect(""));
                 let sites: Vec<String> =
-                    line.map(|x| x.to_string()).collect::<Vec<String>>();
+                    iter.map(|x| x.to_string()).collect::<Vec<String>>();
 
+                /*
+                 * While technically we could support non-UTF-8 paths, and try
+                 * to do so by using PathBufs, we are currently restricted by
+                 * both indicatif and reqwest requiring String or str.  So for
+                 * now just give up if we can't convert.
+                 */
+                let filename = String::from(
+                    filepath
+                        .file_name()
+                        .expect("unable to extract filename")
+                        .to_str()
+                        .unwrap_or("blah"),
+                );
                 files.push(FetchFile {
-                    filename: file,
-                    distdir: dir,
+                    filepath,
+                    filename,
+                    distdir,
                     sites,
                     status: true,
                 });
@@ -210,7 +225,7 @@ fn fetch_and_verify(
 ) -> Result<(), FetchError> {
     // Set the target filename
     let mut file_name = PathBuf::from(&file.distdir);
-    file_name.push(&file.filename);
+    file_name.push(&file.filepath);
 
     /*
      * Create all necessary directories.
@@ -225,7 +240,7 @@ fn fetch_and_verify(
      * verify that it is), otherwise remove and retry.
      */
     if file_name.exists() {
-        match distinfo.check_file_size(&file_name) {
+        match distinfo.verify_size(&file_name) {
             Ok(_) => return Ok(()),
             Err(_) => fs::remove_file(&file_name)?,
         }
@@ -237,8 +252,7 @@ fn fetch_and_verify(
     .unwrap()
     .progress_chars("##-");
 
-    for site in &file.sites {
-        let fname = file.filename.clone();
+    'nextsite: for site in &file.sites {
         let url = url_from_site(site, &file.filename);
         match reqwest::blocking::get(&url) {
             Ok(mut body) => {
@@ -248,7 +262,7 @@ fn fetch_and_verify(
                 }
                 let pb = progress
                     .add(ProgressBar::new(body.content_length().unwrap_or(0)));
-                pb.set_message(fname);
+                pb.set_message(file.filename.clone());
                 pb.set_style(style.clone());
                 let file = File::create(&file_name)?;
                 body.copy_to(&mut pb.wrap_write(&file))?;
@@ -258,13 +272,14 @@ fn fetch_and_verify(
                 /*
                  * Perform file checks.
                  */
-                match distinfo.check_file(&file_name) {
-                    Ok(_) => return Ok(()),
-                    Err(e) => {
+                for result in distinfo.verify_checksums(&file_name) {
+                    if let Err(e) = result {
+                        eprintln!("Failed to fetch {url}");
                         eprintln!("{e}");
-                        continue;
+                        continue 'nextsite;
                     }
                 }
+                return Ok(());
             }
             Err(e) => {
                 /*
@@ -285,5 +300,5 @@ fn fetch_and_verify(
             }
         }
     }
-    Err(FetchError::NotFound(file.filename.clone()))
+    Err(FetchError::NotFound)
 }
