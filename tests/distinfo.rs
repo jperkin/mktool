@@ -184,6 +184,31 @@ fn test_distinfo_single_patch_with_distinfo() {
 }
 
 /*
+ * Test a distinfo containing only distfiles and run in patch mode but with
+ * no valid patchfiles.  This is how makepatchsum would operate, it passes
+ * '/path/to/patches/patch-*' globs which result in nothing.
+ */
+#[test]
+fn test_distinfo_patchmode_no_patches() {
+    let mut distinfo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    distinfo.push("tests/data/distinfo.dists");
+    let diout = fs::read(distinfo).expect("unable to read distinfo");
+    let cmd = Command::new(MKTOOL)
+        .arg("distinfo")
+        .arg("-f")
+        .arg("distinfo.dists")
+        .arg("-p")
+        .arg("SHA1")
+        .arg("patch-non-existent")
+        .current_dir("tests/data")
+        .output()
+        .expect(format!("unable to spawn {}", MKTOOL).as_str());
+    assert_eq!(cmd.status.code(), Some(0));
+    assert_eq!(cmd.stdout, diout);
+    assert_eq!(cmd.stderr, "".as_bytes());
+}
+
+/*
  * Test all known distfiles.  With distinfo the output should be identical and
  * exit 0, without should just print distfiles and exit 1.
  */
