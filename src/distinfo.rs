@@ -16,13 +16,13 @@
 
 use clap::Args;
 use pkgsrc::digest::Digest;
-use pkgsrc::distinfo::{Checksum, Distinfo, Entry};
+use pkgsrc::distinfo::{Checksum, Distinfo, DistinfoError, Entry, EntryType};
+use std::collections::HashSet;
 use std::env;
 use std::fs;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Write};
-use std::os::unix::ffi::OsStrExt;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -66,80 +66,6 @@ pub struct DistInfo {
     patchfiles: Vec<PathBuf>,
 }
 
-/**
- * [`DistInfoType`] contains the type of file, as source files and patches are
- * handled differently.
- */
-#[derive(Clone, Debug, Default, Eq, Hash, PartialEq)]
-pub enum DistInfoType {
-    /**
-     * Regular distribution file, e.g. source tarball for a package.
-     */
-    #[default]
-    Distfile,
-    /**
-     * A pkgsrc patch file that modifies the package source.
-     */
-    Patch,
-}
-
-/**
- * [`Distfile`] contains information about a file entry in the distinfo file.
- */
-#[derive(Clone, Debug, Default)]
-pub struct Distfile {
-    /**
-     * Full path to file.
-     */
-    pub filepath: PathBuf,
-    /**
-     * Filename entry in the distinfo file.  Note that this may be different
-     * to that used in [`filepath`], as there is support for strip-suffix mode
-     * where e.g. foo.tar.gz.download can be compared against foo.tar.gz.
-     *
-     * [`filepath`]: Distfile::filepath
-     */
-    pub filename: PathBuf,
-    /**
-     * Whether this is a distfile or a patch file.
-     */
-    pub filetype: DistInfoType,
-    /**
-     * Information about this distfile (checksums and size) stored in a
-     * Distinfo [`Entry`].
-     */
-    pub entry: Entry,
-    /**
-     * Whether this entry has been processed.  What that means in practise
-     * will differ depending on users of this struct.
-     */
-    pub processed: bool,
-}
-
-impl Distfile {
-    pub fn calculate(
-        &mut self,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        for h in &mut self.entry.checksums {
-            let mut f = fs::File::open(&self.filepath)?;
-            match self.filetype {
-                DistInfoType::Distfile => {
-                    h.hash = h.digest.hash_file(&mut f)?;
-                }
-                DistInfoType::Patch => {
-                    h.hash = h.digest.hash_patch(&mut f)?;
-                }
-            };
-        }
-        if self.filetype == DistInfoType::Distfile {
-            let f = fs::File::open(&self.filepath)?;
-            let m = f.metadata()?;
-            self.entry.size = Some(m.len());
-        }
-        Ok(())
-    }
-}
-
 impl DistInfo {
     pub fn run(&self) -> Result<i32, Box<dyn std::error::Error>> {
         /*
@@ -157,11 +83,11 @@ impl DistInfo {
         /*
          * Read existing distinfo file if specified.
          */
-        let mut distinfo = Distinfo::new();
+        let mut di_cur = Distinfo::new();
         if let Some(di) = &self.distinfo {
             /* If distinfo was specified then it must exist. */
             match fs::read(di) {
-                Ok(s) => distinfo = Distinfo::from_bytes(&s),
+                Ok(s) => di_cur = Distinfo::from_bytes(&s),
                 Err(e) => {
                     eprintln!(
                         "ERROR: Could not open distinfo '{}': {}",
@@ -174,67 +100,23 @@ impl DistInfo {
         }
 
         /*
-         * Create hashes vecs that we can clone for each distfile or patchfile.
+         * Distfiles can be passed using -I or -c, so first add them all to a
+         * HashSet to ensure unique entries, and then later create each Entry.
+         *
+         * Only add distfiles that exist, and silently skip those that don't,
+         * to match distinfo.awk behaviour.
          */
-        let mut d_hashes: Vec<Checksum> = vec![];
-        for a in &self.dalgorithms {
-            let d = Digest::from_str(a)?;
-            let he = Checksum {
-                digest: d,
-                hash: String::new(),
-            };
-            d_hashes.push(he);
-        }
-        let mut p_hashes: Vec<Checksum> = vec![];
-        for a in &self.palgorithms {
-            let d = Digest::from_str(a)?;
-            let he = Checksum {
-                digest: d,
-                hash: String::new(),
-            };
-            p_hashes.push(he);
-        }
-
-        /*
-         * Collect all of the input files and what algorithms are to be
-         * computed for them.
-         */
-        let mut inputfiles: Vec<Distfile> = vec![];
+        let mut distfiles: HashSet<PathBuf> = HashSet::new();
+        let mut entries: Vec<Entry> = vec![];
 
         /*
          * Add files specified by -c.
          */
-        for f in &self.cksumfile {
-            /*
-             * Only add distfiles that exist, and silently skip those that
-             * don't, to match distinfo.awk behaviour.
-             */
-            let mut d = PathBuf::from(&self.distdir);
-            d.push(f);
-            if d.exists() {
-                let f = d.clone();
-                let f = match f.strip_prefix(&self.distdir)?.to_str() {
-                    Some(s) => s,
-                    None => {
-                        eprintln!(
-                            "ERROR: File '{}' is not valid unicode.",
-                            d.display()
-                        );
-                        std::process::exit(1);
-                    }
-                };
-                let e = Entry {
-                    filename: f.into(),
-                    checksums: d_hashes.clone(),
-                    ..Default::default()
-                };
-                let n = Distfile {
-                    filetype: DistInfoType::Distfile,
-                    filepath: d,
-                    entry: e,
-                    ..Default::default()
-                };
-                inputfiles.push(n);
+        for file in &self.cksumfile {
+            let mut fullpath = PathBuf::from(&self.distdir);
+            fullpath.push(file);
+            if fullpath.exists() {
+                distfiles.insert(file.into());
             }
         }
 
@@ -254,67 +136,83 @@ impl DistInfo {
                 }
             };
             for line in reader.lines() {
-                let line = line?;
-                let mut d = PathBuf::from(&self.distdir);
-                d.push(line);
-                if d.exists() {
-                    let f = d.clone();
-                    let f = match f.strip_prefix(&self.distdir)?.to_str() {
-                        Some(s) => s,
-                        None => {
-                            eprintln!(
-                                "ERROR: File '{}' is not valid unicode.",
-                                d.display()
-                            );
-                            std::process::exit(1);
-                        }
-                    };
-                    let e = Entry {
-                        filename: f.into(),
-                        checksums: d_hashes.clone(),
-                        ..Default::default()
-                    };
-                    let n = Distfile {
-                        filetype: DistInfoType::Distfile,
-                        filepath: d,
-                        entry: e,
-                        ..Default::default()
-                    };
-                    inputfiles.push(n);
+                let file = line?;
+                let mut fullpath = PathBuf::from(&self.distdir);
+                fullpath.push(&file);
+                if fullpath.exists() {
+                    distfiles.insert(file.into());
                 }
             }
         }
 
         /*
-         * Add patchfiles added as command line arguments.
+         * Add Entry for each unique distfile passed.
          */
+        let mut distsums: Vec<Checksum> = vec![];
+        for algorithm in &self.dalgorithms {
+            let digest = Digest::from_str(algorithm)?;
+            distsums.push(Checksum::new(digest, String::new()));
+        }
+        for distfile in distfiles {
+            let mut fullpath = PathBuf::from(&self.distdir);
+            fullpath.push(&distfile);
+            let entry = Entry::new(distfile, fullpath, distsums.clone(), None);
+            entries.push(entry);
+        }
+
+        /*
+         * Add patchfiles added as command line arguments.  We may be passed
+         * globs, so check the file actually exists first.
+         */
+        let mut patchsums: Vec<Checksum> = vec![];
+        for algorithm in &self.palgorithms {
+            let digest = Digest::from_str(algorithm)?;
+            patchsums.push(Checksum::new(digest, String::new()));
+        }
         for path in &self.patchfiles {
-            if let Some(filename) = is_patchpath(path) {
-                let e = Entry {
-                    filename: filename.into(),
-                    checksums: p_hashes.clone(),
-                    ..Default::default()
-                };
-                let n = Distfile {
-                    filetype: DistInfoType::Patch,
-                    filepath: path.to_path_buf(),
-                    entry: e,
-                    ..Default::default()
-                };
-                inputfiles.push(n);
+            if path.exists() {
+                if let Some(filename) = path.file_name() {
+                    let entry = Entry::new(
+                        PathBuf::from(filename),
+                        path.to_path_buf(),
+                        patchsums.clone(),
+                        None,
+                    );
+                    entries.push(entry);
+                }
             }
         }
 
         /*
-         * Order all of the input files alphabetically.  Distfiles and
-         * patchfiles will be separated later.
+         * Special case to match distinfo.awk behaviour.  If we were passed a
+         * valid distinfo file but no distfiles, then exit 1 with no output.
+         * If no distinfo then we continue so that an empty entry is printed.
+         *
+         * Note that we specifically need to ensure patchfiles is empty too so
+         * that makepatchsum (which passes a patch-* glob) with no patch files
+         * that exist still prints a valid distinfo.  Save noinputfiles for
+         * later use.
          */
-        inputfiles.sort_by(|a, b| a.filepath.cmp(&b.filepath));
+        let noinputfiles = entries.is_empty() && self.patchfiles.is_empty();
+        if noinputfiles && self.distinfo.is_some() {
+            return Ok(1);
+        }
 
         /*
-         * Now set up parallel processing of the Vec.
+         * Order all of the input files alphabetically.  Distfiles and
+         * patchfiles are separated in the final output by Distinfo.
          */
-        let mut threads = vec![];
+        entries.sort_by(|a, b| a.filepath.cmp(&b.filepath));
+
+        /*
+         * Wrap each Entry in its own Mutex, and set up parallel processing.
+         */
+        let entries: Vec<_> = entries
+            .into_iter()
+            .map(|s| Arc::new(Mutex::new(s)))
+            .collect();
+        let mut threads: Vec<thread::JoinHandle<Result<(), DistinfoError>>> =
+            vec![];
         let active_threads = Arc::new(Mutex::new(0));
         let default_threads = 4;
         let max_threads = match self.jobs {
@@ -326,21 +224,12 @@ impl DistInfo {
         };
 
         /*
-         * Wrap each distfile entry in its own Mutex.
+         * Calculate checksums for each Entry, and size for Distfile entries,
+         * storing results back into the Entry.
          */
-        let inputfiles: Vec<_> = inputfiles
-            .into_iter()
-            .map(|s| Arc::new(Mutex::new(s)))
-            .collect();
-
-        /*
-         * Each active thread calls the .calculate() function for its entry
-         * in the Vec, which stores the resulting hashes (and optional size)
-         * back into the entry.
-         */
-        for d in &inputfiles {
+        for entry in &entries {
             let active_threads = Arc::clone(&active_threads);
-            let d = Arc::clone(d);
+            let entry = Arc::clone(entry);
             loop {
                 {
                     let mut active = active_threads.lock().unwrap();
@@ -351,67 +240,53 @@ impl DistInfo {
                 }
                 thread::yield_now();
             }
-            let t = thread::spawn(move || {
-                let mut d = d.lock().unwrap();
-                // XXX: Return correct Result here.
-                let _ = d.calculate();
+            let thread = thread::spawn(move || {
+                let mut entry = entry.lock().unwrap();
+                let filepath = entry.filepath.clone();
+                for c in entry.checksums.iter_mut() {
+                    c.hash = Distinfo::calculate_checksum(&filepath, c.digest)?;
+                }
+                if entry.filetype == EntryType::Distfile {
+                    entry.size = Some(Distinfo::calculate_size(&filepath)?);
+                }
                 {
                     let mut active = active_threads.lock().unwrap();
                     *active -= 1;
                 }
+                Ok(())
             });
-            threads.push(t);
+            threads.push(thread);
         }
-        for t in threads {
-            t.join().unwrap();
+        for thread in threads {
+            match thread.join() {
+                Ok(res) => match res {
+                    Ok(_) => {}
+                    Err(e) => eprintln!("{e}"),
+                },
+                Err(_) => eprintln!("thread panic"),
+            }
         }
 
         /*
          * Now that we're done processing, unwrap back to a plain Vec for
-         * simpler access, and set up separate distfile and patchfile vecs.
+         * simpler access.
          */
-        let inputfiles: Vec<_> = inputfiles
+        let entries: Vec<_> = entries
             .into_iter()
-            .map(|arc_mutex| {
-                Arc::try_unwrap(arc_mutex)
-                    .ok()
-                    .unwrap()
-                    .into_inner()
-                    .unwrap()
-            })
-            .collect();
-        let distfiles: Vec<_> = inputfiles
-            .iter()
-            .filter(|&d| d.filetype == DistInfoType::Distfile)
-            .collect();
-        let patchfiles: Vec<_> = inputfiles
-            .iter()
-            .filter(|&d| d.filetype == DistInfoType::Patch)
+            .map(|a| Arc::try_unwrap(a).ok().unwrap().into_inner().unwrap())
             .collect();
 
         /*
-         * Special case to match distinfo.awk behaviour.  If we were passed a
-         * valid distinfo file (already tested earlier) but no input files,
-         * then exit 1 with no output.
+         * We have all the data we need.  Start constructing our new Distinfo.
          */
-        if inputfiles.is_empty() && self.distinfo.is_some() {
-            return Ok(1);
+        let mut di_new = Distinfo::new();
+
+        if let Some(rcsid) = di_cur.rcsid() {
+            di_new.set_rcsid(rcsid);
         }
-
-        /*
-         * We have all the data we need.  Start constructing our output.
-         */
-        let mut output: Vec<u8> = vec![];
-
-        /*
-         * Add $NetBSD$ header if there isn't one already, and blank line
-         * before starting checksums.
-         */
-        match distinfo.rcsid() {
-            Some(s) => output.extend_from_slice(s.as_bytes()),
-            None => output.extend_from_slice("$NetBSD$".as_bytes()),
-        };
-        output.extend_from_slice("\n\n".as_bytes());
+        for entry in &entries {
+            di_new.insert(entry.clone());
+        }
 
         /*
          * If we weren't passed any distfiles, but there are entries in an
@@ -419,30 +294,9 @@ impl DistInfo {
          * "makepatchsum" operates, by just operating on patch files and
          * keeping any file entries.
          */
-        if distfiles.is_empty() {
-            for f in distinfo.files() {
-                output.extend_from_slice(&f.as_bytes());
-            }
-        } else {
-            for distfile in distfiles {
-                let f = distfile.filepath.strip_prefix(&self.distdir)?;
-                for h in &distfile.entry.checksums {
-                    output.extend_from_slice(
-                        format!(
-                            "{} ({}) = {}\n",
-                            h.digest,
-                            f.display(),
-                            h.hash,
-                        )
-                        .as_bytes(),
-                    );
-                }
-                if let Some(size) = distfile.entry.size {
-                    output.extend_from_slice(
-                        format!("Size ({}) = {} bytes\n", f.display(), size)
-                            .as_bytes(),
-                    );
-                }
+        if di_new.distfiles().is_empty() {
+            for distfile in di_cur.distfiles() {
+                di_new.insert(distfile.clone());
             }
         }
 
@@ -452,23 +306,9 @@ impl DistInfo {
          * "makesum" operates, by just operating on distfiles and
          * keeping any patch entries.
          */
-        if patchfiles.is_empty() {
-            for p in distinfo.patches() {
-                output.extend_from_slice(&p.as_bytes());
-            }
-        } else {
-            for patchfile in patchfiles {
-                for h in &patchfile.entry.checksums {
-                    output.extend_from_slice(
-                        format!(
-                            "{} ({}) = {}\n",
-                            h.digest,
-                            patchfile.entry.filename.display(),
-                            h.hash,
-                        )
-                        .as_bytes(),
-                    );
-                }
+        if di_new.patchfiles().is_empty() {
+            for patchfile in di_cur.patchfiles() {
+                di_new.insert(patchfile.clone());
             }
         }
 
@@ -476,53 +316,17 @@ impl DistInfo {
          * Write resulting distinfo file to stdout.
          */
         let mut stdout = io::stdout().lock();
-        stdout.write_all(&output)?;
+        stdout.write_all(&di_new.as_bytes())?;
         stdout.flush()?;
 
         /*
-         * Return exit code based on whether there were changes or not.
+         * Special case for no input files at all, otherwise return based on
+         * whether the new contents match the old.
          */
-        if !inputfiles.is_empty() && distinfo.as_bytes() == output {
-            Ok(0)
-        } else {
+        if noinputfiles {
             Ok(1)
+        } else {
+            Ok((di_cur.as_bytes() != di_new.as_bytes()) as i32)
         }
     }
-}
-
-/*
- * Verify that a supplied path is a valid patch file.  Returns a String
- * containing the patch filename if so, otherwise None.
- */
-fn is_patchfile(s: &str) -> Option<String> {
-    /*
-     * Skip local patches or temporary patch files created by e.g. mkpatches.
-     */
-    if s.starts_with("patch-local-")
-        || s.ends_with(".orig")
-        || s.ends_with(".rej")
-        || s.ends_with("~")
-    {
-        return None;
-    }
-    /*
-     * Match valid patch filenames.
-     */
-    if s.starts_with("patch-")
-        || (s.starts_with("emul-") && s.contains("-patch-"))
-    {
-        return Some(s.to_string());
-    }
-
-    /*
-     * Anything else is invalid.
-     */
-    None
-}
-
-fn is_patchpath(path: &Path) -> Option<String> {
-    if !path.is_file() {
-        return None;
-    }
-    is_patchfile(path.file_name()?.to_str()?)
 }
