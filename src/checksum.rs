@@ -14,11 +14,10 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-use crate::distinfo::{DistInfoType, Distfile};
 use clap::Args;
 use pkgsrc::digest::Digest;
-use pkgsrc::distinfo::{Checksum, Distinfo};
-use std::collections::HashMap;
+use pkgsrc::distinfo::{Distinfo, DistinfoError, Entry};
+use std::collections::HashSet;
 use std::env;
 use std::fs;
 use std::io::{self, BufRead, BufReader};
@@ -58,86 +57,14 @@ pub struct CheckSum {
     files: Vec<PathBuf>,
 }
 
+#[derive(Debug)]
+struct CheckResult {
+    entry: Entry,
+    results: Mutex<Vec<Result<Digest, DistinfoError>>>,
+}
+
 impl CheckSum {
     pub fn run(&self) -> Result<i32, Box<dyn std::error::Error>> {
-        /*
-         * List of distfiles to check.
-         */
-        let mut distfiles: HashMap<PathBuf, Distfile> = HashMap::new();
-
-        let di_type = if self.patchmode {
-            DistInfoType::Patch
-        } else {
-            DistInfoType::Distfile
-        };
-
-        /*
-         * Add files passed in via -I (supporting stdin if set to "-").
-         */
-        if let Some(infile) = &self.input {
-            let reader: Box<dyn io::BufRead> = match infile.to_str() {
-                Some("-") => Box::new(io::stdin().lock()),
-                Some(f) => Box::new(BufReader::new(fs::File::open(f)?)),
-                None => {
-                    eprintln!(
-                        "ERROR: File '{}' is not valid unicode.",
-                        infile.display()
-                    );
-                    std::process::exit(1);
-                }
-            };
-            for line in reader.lines() {
-                let line = line?;
-                let file = PathBuf::from(line.clone());
-                let f = match &self.stripsuffix {
-                    Some(s) => match line.strip_suffix(s) {
-                        Some(s) => s,
-                        None => line.as_str(),
-                    },
-                    None => line.as_str(),
-                };
-                distfiles.insert(
-                    PathBuf::from(f),
-                    Distfile {
-                        filetype: di_type.clone(),
-                        filepath: file.clone(),
-                        filename: f.into(),
-                        processed: false,
-                        ..Default::default()
-                    },
-                );
-            }
-        }
-
-        /*
-         * Iterate over files passed on the command line, optionally stripping
-         * their suffix, and storing them in the distfiles HashMap.
-         */
-        for file in &self.files {
-            let f = file
-                .file_name()
-                .ok_or("Input is not a filename")?
-                .to_str()
-                .ok_or("Filename is not valid unicode")?;
-            let f = match &self.stripsuffix {
-                Some(s) => match f.strip_suffix(s) {
-                    Some(s) => s,
-                    None => f,
-                },
-                None => f,
-            };
-            distfiles.insert(
-                PathBuf::from(f),
-                Distfile {
-                    filetype: di_type.clone(),
-                    filepath: file.clone(),
-                    filename: f.into(),
-                    processed: false,
-                    ..Default::default()
-                },
-            );
-        }
-
         /*
          * Read in the supplied "distinfo" file.
          */
@@ -155,14 +82,86 @@ impl CheckSum {
         let distinfo = Distinfo::from_bytes(&distinfo);
 
         /*
-         * Record from the distinfo file any matching entries that we will
-         * check against at the end once we've calculated the checksums.
+         * Add files passed in via -I (supporting stdin if set to "-"), and
+         * then those passed on the command line, storing unique entries in
+         * the inputfiles HashSet.
          */
-        let mut distsums: Vec<(PathBuf, Digest, String)> = vec![];
+        let mut inputfiles: HashSet<PathBuf> = HashSet::new();
+
+        if let Some(infile) = &self.input {
+            let reader: Box<dyn io::BufRead> = match infile.to_str() {
+                Some("-") => Box::new(io::stdin().lock()),
+                Some(f) => Box::new(BufReader::new(fs::File::open(f)?)),
+                None => {
+                    eprintln!(
+                        "ERROR: File '{}' is not valid unicode.",
+                        infile.display()
+                    );
+                    std::process::exit(1);
+                }
+            };
+            for line in reader.lines() {
+                let line = line?;
+                if let Some(suffix) = &self.stripsuffix {
+                    match line.strip_suffix(suffix) {
+                        Some(s) => inputfiles.insert(PathBuf::from(s)),
+                        None => inputfiles.insert(PathBuf::from(line)),
+                    };
+                } else {
+                    inputfiles.insert(PathBuf::from(line));
+                }
+            }
+        }
+        for file in &self.files {
+            if let Some(suffix) = &self.stripsuffix {
+                match file
+                    .to_str()
+                    .expect("filename is not valid UTF-8")
+                    .strip_suffix(suffix)
+                {
+                    Some(s) => inputfiles.insert(PathBuf::from(s)),
+                    None => inputfiles.insert(PathBuf::from(file)),
+                };
+            } else {
+                inputfiles.insert(PathBuf::from(file));
+            }
+        }
 
         /*
-         * If a single algorithm is requested then match it, otherwise
-         * skip.
+         * No input files, return early.
+         */
+        if inputfiles.is_empty() {
+            return Ok(0);
+        }
+
+        /*
+         * Iterate through all input files, adding to checkfiles if found in
+         * distinfo.  Any entries left in inputfiles are later printed as
+         * missing.
+         */
+        let mut checkfiles: HashSet<Entry> = HashSet::new();
+        let mut remove: Vec<PathBuf> = Vec::new();
+        for file in &inputfiles {
+            /*
+             * There's probably a way to do this with a function ptr, but I
+             * haven't yet been able to construct the correct syntax.
+             */
+            if self.patchmode {
+                if let Some(entry) = distinfo.get_patchfile(file) {
+                    checkfiles.insert(entry.clone());
+                    remove.push(file.to_path_buf());
+                }
+            } else if let Some(entry) = distinfo.get_distfile(file) {
+                checkfiles.insert(entry.clone());
+                remove.push(file.to_path_buf());
+            }
+        }
+        for r in remove {
+            inputfiles.remove(&r);
+        }
+
+        /*
+         * If a single algorithm is requested then only match it.
          */
         let mut single_digest: Option<Digest> = None;
         if let Some(a) = &self.algorithm {
@@ -170,42 +169,7 @@ impl CheckSum {
         }
 
         /*
-         * Iterate over the entries stored in "distinfo", selecting any that
-         * match one of the filenames we've been passed, and their checksums.
-         */
-        let entryiter = if self.patchmode {
-            &distinfo.patches()
-        } else {
-            &distinfo.files()
-        };
-
-        for e in entryiter {
-            let df = match distfiles.get_mut(&e.filename) {
-                Some(s) => s,
-                None => continue,
-            };
-            for checksum in &e.checksums {
-                if let Some(ref digest) = single_digest {
-                    if *digest != checksum.digest {
-                        continue;
-                    }
-                }
-                df.entry.checksums.push(Checksum {
-                    digest: checksum.digest.clone(),
-                    hash: String::new(),
-                });
-                /* Set processed flag to indicate we've seen this file. */
-                df.processed = true;
-                distsums.push((
-                    e.filename.clone(),
-                    checksum.digest.clone(),
-                    checksum.hash.clone(),
-                ));
-            }
-        }
-
-        /*
-         * Convert the distfiles HashMap into a Vec, wrapping each in a Mutex,
+         * Convert checkfiles into a Arc Vec, wrapping results in a Mutex
          * so that we can process them in parallel.
          */
         let mut threads = vec![];
@@ -218,14 +182,19 @@ impl CheckSum {
                 Err(_) => default_threads,
             },
         };
-        let di_vec: Vec<_> = distfiles
-            .into_values()
-            .map(|v| Arc::new(Mutex::new(v)))
+        let checkfiles: Vec<Arc<CheckResult>> = checkfiles
+            .into_iter()
+            .map(|e| {
+                Arc::new(CheckResult {
+                    entry: e,
+                    results: Mutex::new(vec![]),
+                })
+            })
             .collect();
 
-        for d in &di_vec {
+        for file in &checkfiles {
             let active_threads = Arc::clone(&active_threads);
-            let d = Arc::clone(d);
+            let file = Arc::clone(file);
             loop {
                 {
                     let mut active = active_threads.lock().unwrap();
@@ -236,88 +205,96 @@ impl CheckSum {
                 }
                 thread::yield_now();
             }
-            let t = thread::spawn(move || {
-                let mut d = d.lock().unwrap();
-                // XXX: Return correct Result here.
-                let _ = d.calculate();
+            let thread = thread::spawn(move || {
+                let mut res = file.results.lock().unwrap();
+                match single_digest {
+                    Some(digest) => {
+                        *res = vec![file
+                            .entry
+                            .verify_checksum(&file.entry.filename, digest)]
+                    }
+                    None => {
+                        *res = file.entry.verify_checksums(&file.entry.filename)
+                    }
+                };
                 {
                     let mut active = active_threads.lock().unwrap();
                     *active -= 1;
                 }
             });
-            threads.push(t);
+            threads.push(thread);
         }
-        for t in threads {
-            t.join().unwrap();
+        for thread in threads {
+            thread.join().unwrap();
         }
 
         /*
-         * Unwrap processed distfiles back into a plain HashMap.
+         * Unwrap processed checkfiles back into a plain Vec, sorted by entry
+         * filename, to ease processing.
          */
-        let distfiles: HashMap<PathBuf, Distfile> = di_vec
+        let mut checkfiles: Vec<CheckResult> = checkfiles
             .into_iter()
-            .map(|arc_mutex| {
-                Arc::try_unwrap(arc_mutex)
-                    .ok()
-                    .unwrap()
-                    .into_inner()
-                    .unwrap()
-            })
-            .map(|p| (PathBuf::from(&p.filename), p))
+            .map(|a| Arc::into_inner(a).unwrap())
             .collect();
+        checkfiles.sort_by(|a, b| a.entry.filename.cmp(&b.entry.filename));
 
         /*
-         * We have processed everything, print results.  This is done in
-         * multiple passes to keep the output order compatible with
-         * checksum.awk.
+         * We have processed everything, print results and return compatible
+         * exit status.  Output and order should match checksum.awk.
          */
-        for (file, digest, hash) in distsums {
-            let df = match distfiles.get(&file) {
-                Some(s) => s,
-                None => continue,
-            };
-            /*
-             * Find correct digest entry.
-             */
-            let mut found = false;
-            for h in &df.entry.checksums {
-                if h.digest == digest && h.hash == hash {
-                    println!(
+        let mut rv = 0;
+        for file in checkfiles {
+            for result in file.results.lock().unwrap().iter() {
+                match result {
+                    Ok(digest) => println!(
                         "=> Checksum {} OK for {}",
                         digest,
-                        file.display()
-                    );
-                    found = true;
-                    break;
+                        file.entry.filename.display()
+                    ),
+                    Err(DistinfoError::Checksum(path, digest, _, _)) => {
+                        eprintln!(
+                            "checksum: Checksum {} mismatch for {}",
+                            digest,
+                            path.display()
+                        );
+                        /* checksum.awk bails on first mismatch */
+                        return Ok(1);
+                    }
+                    Err(DistinfoError::MissingChecksum(path, digest)) => {
+                        eprintln!(
+                            "checksum: No {} checksum recorded for {}",
+                            digest,
+                            path.display()
+                        );
+                        rv = 2;
+                    }
+                    Err(e) => eprintln!("ERROR: {e}"),
                 }
             }
-            if !found {
+        }
+        /*
+         * checksum.awk prints missing files in arbitrary order.  We differ
+         * in behaviour here and ensure they are sorted, mainly because it
+         * ensures test results are stable.
+         */
+        let mut missing: Vec<PathBuf> = inputfiles.into_iter().collect();
+        missing.sort();
+        for file in missing {
+            if let Some(digest) = single_digest {
                 eprintln!(
-                    "checksum: Checksum {} mismatch for {}",
+                    "checksum: No {} checksum recorded for {}",
                     digest,
                     file.display()
                 );
-                return Ok(1);
+            } else {
+                eprintln!(
+                    "checksum: No checksum recorded for {}",
+                    file.display()
+                );
             }
+            rv = 2;
         }
-        let mut rv = 0;
-        for (k, v) in distfiles {
-            if !v.processed {
-                if let Some(a) = &self.algorithm {
-                    eprintln!(
-                        "checksum: No {} checksum recorded for {}",
-                        a,
-                        k.display()
-                    );
-                } else {
-                    eprintln!(
-                        "checksum: No checksum recorded for {}",
-                        k.display()
-                    );
-                }
-                rv = 2;
-            }
-        }
+
         Ok(rv)
     }
 }
