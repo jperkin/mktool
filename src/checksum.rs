@@ -142,19 +142,12 @@ impl CheckSum {
         let mut checkfiles: HashSet<Entry> = HashSet::new();
         let mut remove: Vec<PathBuf> = Vec::new();
         for file in &inputfiles {
-            /*
-             * There's probably a way to do this with a function ptr, but I
-             * haven't yet been able to construct the correct syntax.
-             */
-            if self.patchmode {
-                if let Some(entry) = distinfo.get_patchfile(file) {
-                    checkfiles.insert(entry.clone());
-                    remove.push(file.to_path_buf());
-                }
-            } else if let Some(entry) = distinfo.get_distfile(file) {
-                checkfiles.insert(entry.clone());
-                remove.push(file.to_path_buf());
-            }
+            let entry = match distinfo.find_entry(file) {
+                Ok(e) => e,
+                Err(_) => continue,
+            };
+            checkfiles.insert(entry.clone());
+            remove.push(file.to_path_buf());
         }
         for r in remove {
             inputfiles.remove(&r);

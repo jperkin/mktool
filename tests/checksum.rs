@@ -118,6 +118,20 @@ fn test_checksum_valid_distfile() {
     assert_eq!(cmd.stderr, "".as_bytes());
 
     /*
+     * Identical to previous except the path to the distfile is
+     * different (but still valid).
+     */
+    let cmd = Command::new(MKTOOL)
+        .arg("checksum")
+        .arg(distinfo.clone())
+        .arg("../data/digest1.txt")
+        .current_dir("tests/data")
+        .output()
+        .expect(format!("unable to exec {}", MKTOOL).as_str());
+    assert_eq!(cmd.status.code(), Some(0));
+    assert_eq!(cmd.stdout, output.as_bytes());
+    assert_eq!(cmd.stderr, "".as_bytes());
+    /*
      * Valid, but we only request a single algorithm each time.
      */
     let output = "=> Checksum BLAKE2s OK for digest1.txt\n";
@@ -312,7 +326,7 @@ fn test_checksum_no_checksum() {
  * Patch mode.
  */
 #[test]
-fn test_checksum_patch_mode() {
+fn test_checksum_patch() {
     let mut distinfo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     distinfo.push("tests/data/distinfo");
     let output = "=> Checksum SHA1 OK for patch-Makefile\n";
@@ -321,6 +335,28 @@ fn test_checksum_patch_mode() {
         .arg("-p")
         .arg(distinfo.clone())
         .arg("patch-Makefile")
+        .current_dir("tests/data")
+        .output()
+        .expect(format!("unable to exec {}", MKTOOL).as_str());
+    assert_eq!(cmd.status.code(), Some(0));
+    assert_eq!(cmd.stdout, output.as_bytes());
+    assert_eq!(cmd.stderr, "".as_bytes());
+}
+
+/*
+ * Patch mode where the path doesn't exactly match the distinfo entry,
+ * ensuring that find_entry() functionality is tested.
+ */
+#[test]
+fn test_checksum_patch_path() {
+    let mut distinfo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    distinfo.push("tests/data/distinfo");
+    let output = "=> Checksum SHA1 OK for patch-Makefile\n";
+    let cmd = Command::new(MKTOOL)
+        .arg("checksum")
+        .arg("-p")
+        .arg(distinfo.clone())
+        .arg("../data/patch-Makefile")
         .current_dir("tests/data")
         .output()
         .expect(format!("unable to exec {}", MKTOOL).as_str());
