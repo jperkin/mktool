@@ -14,9 +14,11 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+use crate::MKTOOL_DEFAULT_THREADS;
 use clap::Args;
 use pkgsrc::digest::Digest;
-use pkgsrc::distinfo::{Checksum, Distinfo, DistinfoError, Entry, EntryType};
+use pkgsrc::distinfo::{Checksum, Distinfo, Entry, EntryType};
+use rayon::prelude::*;
 use std::collections::HashSet;
 use std::env;
 use std::fs;
@@ -24,8 +26,6 @@ use std::fs::File;
 use std::io::{self, BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::str::FromStr;
-use std::sync::{Arc, Mutex};
-use std::thread;
 
 #[derive(Args, Debug)]
 pub struct DistInfo {
@@ -55,7 +55,7 @@ pub struct DistInfo {
 
     #[arg(short = 'j', value_name = "jobs")]
     #[arg(help = "Maximum number of threads (or \"MKTOOL_JOBS\" env var)")]
-    jobs: Option<u64>,
+    jobs: Option<usize>,
 
     #[arg(short = 'p', value_name = "algorithm")]
     #[arg(help = "Algorithm digests to create for each patchfile")]
@@ -205,76 +205,52 @@ impl DistInfo {
         entries.sort_by(|a, b| a.filepath.cmp(&b.filepath));
 
         /*
-         * Wrap each Entry in its own Mutex, and set up parallel processing.
+         * Set up rayon threadpool.  -j argument has highest precedence, then
+         * MKTOOLS_JOBS environment variable, finally MKTOOL_DEFAULT_THREADS.
          */
-        let entries: Vec<_> = entries
-            .into_iter()
-            .map(|s| Arc::new(Mutex::new(s)))
-            .collect();
-        let mut threads: Vec<thread::JoinHandle<Result<(), DistinfoError>>> =
-            vec![];
-        let active_threads = Arc::new(Mutex::new(0));
-        let default_threads = 4;
-        let max_threads = match self.jobs {
+        let nthreads = match self.jobs {
             Some(n) => n,
             None => match env::var("MKTOOL_JOBS") {
-                Ok(n) => n.parse::<u64>().unwrap_or(default_threads),
-                Err(_) => default_threads,
+                Ok(n) => n.parse::<usize>().unwrap_or(MKTOOL_DEFAULT_THREADS),
+                Err(_) => MKTOOL_DEFAULT_THREADS,
             },
         };
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(nthreads)
+            .build_global()
+            .unwrap();
 
         /*
          * Calculate checksums for each Entry, and size for Distfile entries,
          * storing results back into the Entry.
          */
-        for entry in &entries {
-            let active_threads = Arc::clone(&active_threads);
-            let entry = Arc::clone(entry);
-            loop {
-                {
-                    let mut active = active_threads.lock().unwrap();
-                    if *active < max_threads {
-                        *active += 1;
-                        break;
+        entries.par_iter_mut().for_each(|entry| {
+            let filepath = entry.filepath.clone();
+            for c in entry.checksums.iter_mut() {
+                match Distinfo::calculate_checksum(&filepath, c.digest) {
+                    Ok(h) => c.hash = h,
+                    Err(e) => {
+                        eprintln!(
+                            "Unable to calculate checksum for {}: {}",
+                            &filepath.display(),
+                            e
+                        );
                     }
-                }
-                thread::yield_now();
+                };
             }
-            let thread = thread::spawn(move || {
-                let mut entry = entry.lock().unwrap();
-                let filepath = entry.filepath.clone();
-                for c in entry.checksums.iter_mut() {
-                    c.hash = Distinfo::calculate_checksum(&filepath, c.digest)?;
-                }
-                if entry.filetype == EntryType::Distfile {
-                    entry.size = Some(Distinfo::calculate_size(&filepath)?);
-                }
-                {
-                    let mut active = active_threads.lock().unwrap();
-                    *active -= 1;
-                }
-                Ok(())
-            });
-            threads.push(thread);
-        }
-        for thread in threads {
-            match thread.join() {
-                Ok(res) => match res {
-                    Ok(_) => {}
-                    Err(e) => eprintln!("{e}"),
-                },
-                Err(_) => eprintln!("thread panic"),
+            if entry.filetype == EntryType::Distfile {
+                match Distinfo::calculate_size(&filepath) {
+                    Ok(s) => entry.size = Some(s),
+                    Err(e) => {
+                        eprintln!(
+                            "Unable to calculate size for {}: {}",
+                            &filepath.display(),
+                            e
+                        );
+                    }
+                };
             }
-        }
-
-        /*
-         * Now that we're done processing, unwrap back to a plain Vec for
-         * simpler access.
-         */
-        let entries: Vec<_> = entries
-            .into_iter()
-            .map(|a| Arc::try_unwrap(a).ok().unwrap().into_inner().unwrap())
-            .collect();
+        });
 
         /*
          * We have all the data we need.  Start constructing our new Distinfo.
