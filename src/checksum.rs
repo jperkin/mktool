@@ -14,17 +14,17 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+use crate::MKTOOL_DEFAULT_THREADS;
 use clap::Args;
 use pkgsrc::digest::Digest;
 use pkgsrc::distinfo::{Distinfo, DistinfoError, Entry};
+use rayon::prelude::*;
 use std::collections::HashSet;
 use std::env;
 use std::fs;
 use std::io::{self, BufRead, BufReader};
 use std::path::PathBuf;
 use std::str::FromStr;
-use std::sync::{Arc, Mutex};
-use std::thread;
 
 #[derive(Args, Debug)]
 pub struct CheckSum {
@@ -38,7 +38,7 @@ pub struct CheckSum {
 
     #[arg(short = 'j', value_name = "jobs")]
     #[arg(help = "Maximum number of threads (or \"MKTOOL_JOBS\" env var)")]
-    jobs: Option<u64>,
+    jobs: Option<usize>,
 
     #[arg(short = 'p', default_value = "false")]
     #[arg(help = "Operate in patch mode")]
@@ -60,7 +60,7 @@ pub struct CheckSum {
 #[derive(Debug)]
 struct CheckResult {
     entry: Entry,
-    results: Mutex<Vec<Result<Digest, DistinfoError>>>,
+    results: Vec<Result<Digest, DistinfoError>>,
 }
 
 impl CheckSum {
@@ -162,82 +162,58 @@ impl CheckSum {
         }
 
         /*
-         * Convert checkfiles into a Arc Vec, wrapping results in a Mutex
-         * so that we can process them in parallel.
-         */
-        let mut threads = vec![];
-        let active_threads = Arc::new(Mutex::new(0));
-        let default_threads = 4;
-        let max_threads = match self.jobs {
-            Some(n) => n,
-            None => match env::var("MKTOOL_JOBS") {
-                Ok(n) => n.parse::<u64>().unwrap_or(default_threads),
-                Err(_) => default_threads,
-            },
-        };
-        let checkfiles: Vec<Arc<CheckResult>> = checkfiles
-            .into_iter()
-            .map(|e| {
-                Arc::new(CheckResult {
-                    entry: e,
-                    results: Mutex::new(vec![]),
-                })
-            })
-            .collect();
-
-        for file in &checkfiles {
-            let active_threads = Arc::clone(&active_threads);
-            let file = Arc::clone(file);
-            loop {
-                {
-                    let mut active = active_threads.lock().unwrap();
-                    if *active < max_threads {
-                        *active += 1;
-                        break;
-                    }
-                }
-                thread::yield_now();
-            }
-            let thread = thread::spawn(move || {
-                let mut res = file.results.lock().unwrap();
-                match single_digest {
-                    Some(digest) => {
-                        *res = vec![file
-                            .entry
-                            .verify_checksum(&file.entry.filename, digest)]
-                    }
-                    None => {
-                        *res = file.entry.verify_checksums(&file.entry.filename)
-                    }
-                };
-                {
-                    let mut active = active_threads.lock().unwrap();
-                    *active -= 1;
-                }
-            });
-            threads.push(thread);
-        }
-        for thread in threads {
-            thread.join().unwrap();
-        }
-
-        /*
-         * Unwrap processed checkfiles back into a plain Vec, sorted by entry
-         * filename, to ease processing.
+         * Create Vec of results for parallel processing.
          */
         let mut checkfiles: Vec<CheckResult> = checkfiles
             .into_iter()
-            .map(|a| Arc::into_inner(a).unwrap())
+            .map(|e| CheckResult {
+                entry: e,
+                results: vec![],
+            })
             .collect();
-        checkfiles.sort_by(|a, b| a.entry.filename.cmp(&b.entry.filename));
+
+        /*
+         * Set up rayon threadpool.  -j argument has highest precedence, then
+         * MKTOOLS_JOBS environment variable, finally MKTOOL_DEFAULT_THREADS.
+         */
+        let nthreads = match self.jobs {
+            Some(n) => n,
+            None => match env::var("MKTOOL_JOBS") {
+                Ok(n) => n.parse::<usize>().unwrap_or(MKTOOL_DEFAULT_THREADS),
+                Err(_) => MKTOOL_DEFAULT_THREADS,
+            },
+        };
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(nthreads)
+            .build_global()
+            .unwrap();
+
+        /*
+         * Process checkfiles vec in parallel, storing each result back into
+         * its own entry.
+         */
+        checkfiles.par_iter_mut().for_each(|file| {
+            match single_digest {
+                Some(digest) => {
+                    file.results = vec![file
+                        .entry
+                        .verify_checksum(&file.entry.filename, digest)]
+                }
+                None => {
+                    file.results =
+                        file.entry.verify_checksums(&file.entry.filename)
+                }
+            };
+        });
 
         /*
          * We have processed everything, print results and return compatible
          * exit status.  Output and order should match checksum.awk.
          */
+        checkfiles.sort_by(|a, b| a.entry.filename.cmp(&b.entry.filename));
         let mut rv = 0;
         for file in checkfiles {
-            for result in file.results.lock().unwrap().iter() {
+            for result in file.results {
                 match result {
                     Ok(digest) => println!(
                         "=> Checksum {} OK for {}",
