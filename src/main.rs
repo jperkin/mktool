@@ -19,6 +19,8 @@ mod distinfo;
 mod fetch;
 mod symlinks;
 
+const MKTOOL_DEFAULT_THREADS: usize = 4;
+
 use clap::{Parser, Subcommand};
 
 #[derive(Debug, Parser)]
