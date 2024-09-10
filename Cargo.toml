@@ -13,6 +13,7 @@ edition = "2021"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
+elf = "0.7.4"
 indicatif = "0.17.8"
 pkgsrc = "0.1.30"
 rayon = "1.10.0"

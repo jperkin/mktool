@@ -15,6 +15,7 @@
  */
 
 mod checksum;
+mod ctfconvert;
 mod distinfo;
 mod fetch;
 mod symlinks;
@@ -39,6 +40,8 @@ pub struct Cli {
 enum Commands {
     /// Verify checksums from a distinfo file.
     CheckSum(checksum::CheckSum),
+    /// Convert DWARF debug information in binary files to CTF.
+    CTFConvert(ctfconvert::CTFConvert),
     /// Create or update distinfo file.
     DistInfo(distinfo::DistInfo),
     /// Fetch distfiles.
@@ -52,6 +55,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let rv = match &cli.command {
         Commands::CheckSum(cmd) => cmd.run()?,
+        Commands::CTFConvert(cmd) => cmd.run()?,
         Commands::DistInfo(cmd) => cmd.run()?,
         Commands::Fetch(cmd) => cmd.run()?,
         Commands::Symlinks(cmd) => cmd.run()?,
