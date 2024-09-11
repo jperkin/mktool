@@ -91,15 +91,15 @@ impl Fetch {
             // filepath distdir site [site ...]
             for line in reader.lines() {
                 let line = line?;
-                let mut iter = line.split_whitespace();
-                if iter.clone().count() < 3 {
+                let v: Vec<&str> = line.split_whitespace().collect();
+                if v.len() < 3 {
                     eprintln!("Invalid input: {}", line);
                     return Ok(1);
                 }
-                let filepath = PathBuf::from(iter.next().expect(""));
-                let distdir = PathBuf::from(iter.next().expect(""));
+                let filepath = PathBuf::from(v[0]);
+                let distdir = PathBuf::from(v[1]);
                 let sites: Vec<String> =
-                    iter.map(|x| x.to_string()).collect::<Vec<String>>();
+                    v[2..].iter().map(|s| s.to_string()).collect();
 
                 /*
                  * While technically we could support non-UTF-8 paths, and try
