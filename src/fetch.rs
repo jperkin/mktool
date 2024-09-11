@@ -14,17 +14,17 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+use crate::MKTOOL_DEFAULT_THREADS;
 use clap::Args;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use pkgsrc::distinfo::Distinfo;
+use rayon::prelude::*;
 use std::env;
 use std::error::Error;
 use std::fs;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
-use std::thread;
 use thiserror::Error;
 
 #[derive(Args, Debug)]
@@ -43,7 +43,7 @@ pub struct Fetch {
 
     #[arg(short = 'j', value_name = "jobs")]
     #[arg(help = "Maximum number of threads (or \"MKTOOL_JOBS\" env var)")]
-    jobs: Option<u64>,
+    jobs: Option<usize>,
 }
 
 #[derive(Clone, Debug)]
@@ -124,63 +124,29 @@ impl Fetch {
             }
         }
 
-        let mut threads = vec![];
-        let active_threads = Arc::new(Mutex::new(0));
-        let default_threads = 4;
-        let max_threads = match self.jobs {
+        /*
+         * Set up rayon threadpool.  -j argument has highest precedence, then
+         * MKTOOLS_JOBS environment variable, finally MKTOOL_DEFAULT_THREADS.
+         */
+        let nthreads = match self.jobs {
             Some(n) => n,
             None => match env::var("MKTOOL_JOBS") {
-                Ok(n) => n.parse::<u64>().unwrap_or(default_threads),
-                Err(_) => default_threads,
+                Ok(n) => n.parse::<usize>().unwrap_or(MKTOOL_DEFAULT_THREADS),
+                Err(_) => MKTOOL_DEFAULT_THREADS,
             },
         };
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(nthreads)
+            .build_global()
+            .unwrap();
 
         let progress = MultiProgress::new();
 
-        let files: Vec<_> =
-            files.into_iter().map(|s| Arc::new(Mutex::new(s))).collect();
-
-        for f in &files {
-            let active_threads = Arc::clone(&active_threads);
-            let f = Arc::clone(f);
-            let p = progress.clone();
-            let d = distinfo.clone();
-            loop {
-                {
-                    let mut active = active_threads.lock().unwrap();
-                    if *active < max_threads {
-                        *active += 1;
-                        break;
-                    }
-                }
-                thread::yield_now();
+        files.par_iter_mut().for_each(|file| {
+            if fetch_and_verify(file, &distinfo, &progress).is_err() {
+                file.status = false;
             }
-            let t = thread::spawn(move || {
-                let mut f = f.lock().unwrap();
-                if fetch_and_verify(&f, &d, &p).is_err() {
-                    f.status = false;
-                }
-                {
-                    let mut active = active_threads.lock().unwrap();
-                    *active -= 1;
-                }
-            });
-            threads.push(t);
-        }
-        for t in threads {
-            t.join().unwrap();
-        }
-        /* Unwrap Arc/Mutex */
-        let files: Vec<_> = files
-            .into_iter()
-            .map(|arc_mutex| {
-                Arc::try_unwrap(arc_mutex)
-                    .ok()
-                    .unwrap()
-                    .into_inner()
-                    .unwrap()
-            })
-            .collect();
+        });
 
         let mut rc = 0;
         for f in &files {
