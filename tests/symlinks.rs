@@ -30,7 +30,7 @@ fn test_symlink_simple() {
     let tmpdir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"));
     let mut cmd = Command::new(MKTOOL)
         .arg("symlinks")
-        .current_dir(tmpdir.clone())
+        .current_dir(&tmpdir)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()
@@ -59,7 +59,7 @@ fn test_symlink_overwrite() {
     let tmpdir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"));
     let mut cmd = Command::new(MKTOOL)
         .arg("symlinks")
-        .current_dir(tmpdir.clone())
+        .current_dir(&tmpdir)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()
@@ -89,7 +89,7 @@ fn test_symlink_subdir() {
     let tmpdir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"));
     let mut cmd = Command::new(MKTOOL)
         .arg("symlinks")
-        .current_dir(tmpdir.clone())
+        .current_dir(&tmpdir)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()
@@ -129,7 +129,7 @@ fn test_symlink_invalid() {
     fs::create_dir(&tmpdir).expect("unable to create directory");
     let mut cmd = Command::new(MKTOOL)
         .arg("symlinks")
-        .current_dir(tmpdir.clone())
+        .current_dir(&tmpdir)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()
