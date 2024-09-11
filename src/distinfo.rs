@@ -225,26 +225,25 @@ impl DistInfo {
          * storing results back into the Entry.
          */
         entries.par_iter_mut().for_each(|entry| {
-            let filepath = entry.filepath.clone();
             for c in entry.checksums.iter_mut() {
-                match Distinfo::calculate_checksum(&filepath, c.digest) {
+                match Distinfo::calculate_checksum(&entry.filepath, c.digest) {
                     Ok(h) => c.hash = h,
                     Err(e) => {
                         eprintln!(
                             "Unable to calculate checksum for {}: {}",
-                            &filepath.display(),
+                            &entry.filepath.display(),
                             e
                         );
                     }
                 };
             }
             if entry.filetype == EntryType::Distfile {
-                match Distinfo::calculate_size(&filepath) {
+                match Distinfo::calculate_size(&entry.filepath) {
                     Ok(s) => entry.size = Some(s),
                     Err(e) => {
                         eprintln!(
                             "Unable to calculate size for {}: {}",
-                            &filepath.display(),
+                            &entry.filepath.display(),
                             e
                         );
                     }
