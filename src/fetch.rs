@@ -16,7 +16,7 @@
 
 use crate::MKTOOL_DEFAULT_THREADS;
 use clap::Args;
-use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use indicatif::{HumanBytes, HumanDuration, ProgressBar, ProgressStyle};
 use pkgsrc::distinfo::Distinfo;
 use rayon::prelude::*;
 use std::env;
@@ -25,6 +25,7 @@ use std::fs;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
 use std::path::PathBuf;
+use std::time::Instant;
 use thiserror::Error;
 
 #[derive(Args, Debug)]
@@ -67,6 +68,7 @@ pub enum FetchError {
 
 impl Fetch {
     pub fn run(&self) -> Result<i32, FetchError> {
+        let started = Instant::now();
         let mut files: Vec<FetchFile> = vec![];
 
         let distinfo = match &self.distinfo {
@@ -140,7 +142,14 @@ impl Fetch {
             .build_global()
             .unwrap();
 
-        let progress = MultiProgress::new();
+        let style = ProgressStyle::with_template(
+            "{prefix:>12} [{bar:57}] {binary_bytes:>7}/{binary_total_bytes:7}",
+        )
+        .unwrap()
+        .progress_chars("=> ");
+        let progress = ProgressBar::new(0)
+            .with_prefix("Downloading")
+            .with_style(style);
 
         files.par_iter_mut().for_each(|file| {
             if fetch_and_verify(file, &distinfo, &progress).is_err() {
@@ -148,15 +157,32 @@ impl Fetch {
             }
         });
 
-        let mut rc = 0;
+        progress.finish_and_clear();
+
+        let mut rv = 0;
         for f in &files {
             if !f.status {
-                rc = 1;
+                rv = 1;
                 break;
             }
         }
 
-        Ok(rc)
+        /*
+         * Only print the final message if we downloaded something and
+         * everything was a success.
+         */
+        if progress.length() > Some(0) && rv == 0 {
+            let dsize = progress.length().unwrap();
+            let dtime = started.elapsed();
+            println!(
+                "Downloaded {} in {} ({}/s)",
+                HumanBytes(dsize),
+                HumanDuration(dtime),
+                HumanBytes(dsize / dtime.as_millis() as u64 * 1000)
+            );
+        }
+
+        Ok(rv)
     }
 }
 
@@ -187,8 +213,8 @@ fn url_from_site(site: &str, filename: &str) -> String {
 fn fetch_and_verify(
     file: &FetchFile,
     distinfo: &Distinfo,
-    progress: &MultiProgress,
-) -> Result<(), FetchError> {
+    progress: &ProgressBar,
+) -> Result<u64, FetchError> {
     // Set the target filename
     let mut file_name = PathBuf::from(&file.distdir);
     file_name.push(&file.filepath);
@@ -207,45 +233,89 @@ fn fetch_and_verify(
      */
     if file_name.exists() {
         match distinfo.verify_size(&file_name) {
-            Ok(_) => return Ok(()),
+            Ok(s) => return Ok(s),
             Err(_) => fs::remove_file(&file_name)?,
         }
     }
 
-    let style = ProgressStyle::with_template(
-        "[{msg:20!}] {bar:40.cyan/blue} {binary_bytes:>7}/{binary_total_bytes:7}",
-    )
-    .unwrap()
-    .progress_chars("##-");
+    /*
+     * If we cannot determine the length of the remote file (e.g. no
+     * Content-Length header) then fall back to the size (if available) that
+     * we have recorded in distinfo.  If neither are available then we have
+     * no choice but to leave it at zero.
+     */
+    let fsize = match distinfo.get_distfile(&file.filepath) {
+        Some(e) => e.size.unwrap_or(0),
+        None => 0,
+    };
 
+    let mut updated_len = false;
+    let mut printed_msg = false;
     'nextsite: for site in &file.sites {
         let url = url_from_site(site, &file.filename);
-        match reqwest::blocking::get(&url) {
+        /*
+         * Update the progress message only after the initial get() returns,
+         * otherwise there is a noticeable delay between first printing the
+         * "Downloading ..." progress bar and it updating with the first file.
+         */
+        let fetch = reqwest::blocking::get(&url);
+        if !printed_msg {
+            if progress.is_hidden() {
+                /* Simple output for non-ttys. */
+                println!("Fetching {}", &file.filename);
+            } else {
+                progress
+                    .println(format!("{:>12} {}", "Fetching", &file.filename));
+            }
+            printed_msg = true;
+        }
+        match fetch {
             Ok(mut body) => {
+                /*
+                 * If we haven't already done so, update the progress bar size
+                 * with the best information available.
+                 */
+                if !updated_len {
+                    match body.content_length() {
+                        Some(len) => {
+                            if len == 0 {
+                                progress.inc_length(fsize);
+                            } else {
+                                progress.inc_length(len);
+                            }
+                        }
+                        None => {
+                            progress.inc_length(fsize);
+                        }
+                    }
+                    updated_len = true;
+                }
+
                 if !&body.status().is_success() {
-                    eprintln!("Unable to fetch {}: {}", url, &body.status());
+                    progress.suspend(|| {
+                        eprintln!(
+                            "Unable to fetch {}: {}",
+                            url,
+                            &body.status()
+                        );
+                    });
                     continue;
                 }
-                let pb = progress
-                    .add(ProgressBar::new(body.content_length().unwrap_or(0)));
-                pb.set_message(file.filename.clone());
-                pb.set_style(style.clone());
-                let file = File::create(&file_name)?;
-                body.copy_to(&mut pb.wrap_write(&file))?;
-                pb.tick();
-                pb.finish();
-                progress.remove(&pb);
+
                 /*
-                 * Perform file checks.
+                 * Write the file and perform distinfo checks.
                  */
+                let file = File::create(&file_name)?;
+                body.copy_to(&mut progress.wrap_write(&file))?;
                 for result in distinfo.verify_checksums(&file_name) {
                     if let Err(e) = result {
-                        eprintln!("Failed to fetch {url}");
-                        eprintln!("{e}");
+                        progress.suspend(|| {
+                            eprintln!("Verification failed for {url}: {e}");
+                        });
                         continue 'nextsite;
                     }
                 }
-                return Ok(());
+                return Ok(file.metadata()?.len());
             }
             Err(e) => {
                 /*
@@ -254,15 +324,18 @@ fn fetch_and_verify(
                  * the reqwest "Connect" is all but useless.  There's probably
                  * a simpler way to do this but I couldn't find it.
                  */
-                if let Some(r) = e.source() {
-                    if let Some(h) = r.source() {
-                        eprintln!("Unable to fetch {}: {}", url, h);
+                let errmsg = if let Some(reqwest) = e.source() {
+                    if let Some(hyper) = reqwest.source() {
+                        format!("Unable to fetch {}: {}", url, hyper)
                     } else {
-                        eprintln!("Unable to fetch {}: {}", url, r);
+                        format!("Unable to fetch {}: {}", url, reqwest)
                     }
                 } else {
-                    eprintln!("Unable to fetch {}: {}", url, e);
-                }
+                    format!("Unable to fetch {}: {}", url, e)
+                };
+                progress.suspend(|| {
+                    eprintln!("{}", errmsg);
+                });
             }
         }
     }
