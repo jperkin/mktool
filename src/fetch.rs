@@ -19,6 +19,7 @@ use clap::Args;
 use indicatif::{HumanBytes, HumanDuration, ProgressBar, ProgressStyle};
 use pkgsrc::distinfo::Distinfo;
 use rayon::prelude::*;
+use reqwest::blocking::Client;
 use std::env;
 use std::error::Error;
 use std::fs;
@@ -142,6 +143,9 @@ impl Fetch {
             .build_global()
             .unwrap();
 
+        /*
+         * Set up the progress bar.
+         */
         let style = ProgressStyle::with_template(
             "{prefix:>12} [{bar:57}] {binary_bytes:>7}/{binary_total_bytes:7}",
         )
@@ -151,8 +155,16 @@ impl Fetch {
             .with_prefix("Downloading")
             .with_style(style);
 
+        /*
+         * Disable the Referer: header, this appears to cause problems with
+         * redirect handling when downloading from SourceForge.
+         */
+        let client = reqwest::blocking::Client::builder()
+            .referer(false)
+            .build()?;
+
         files.par_iter_mut().for_each(|file| {
-            if fetch_and_verify(file, &distinfo, &progress).is_err() {
+            if fetch_and_verify(&client, file, &distinfo, &progress).is_err() {
                 file.status = false;
             }
         });
@@ -211,6 +223,7 @@ fn url_from_site(site: &str, filename: &str) -> String {
  * listed checksums.
  */
 fn fetch_and_verify(
+    client: &Client,
     file: &FetchFile,
     distinfo: &Distinfo,
     progress: &ProgressBar,
@@ -258,7 +271,7 @@ fn fetch_and_verify(
          * otherwise there is a noticeable delay between first printing the
          * "Downloading ..." progress bar and it updating with the first file.
          */
-        let fetch = reqwest::blocking::get(&url);
+        let fetch = client.get(&url).send();
         if !printed_msg {
             if progress.is_hidden() {
                 /* Simple output for non-ttys. */
