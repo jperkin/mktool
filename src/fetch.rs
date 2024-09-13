@@ -256,7 +256,7 @@ fn fetch_and_verify(
      * we have recorded in distinfo.  If neither are available then we have
      * no choice but to leave it at zero.
      */
-    let fsize = if let Some(di) = distinfo {
+    let expected_size = if let Some(di) = distinfo {
         match di.get_distfile(&file.filepath) {
             Some(e) => e.size.unwrap_or(0),
             None => 0,
@@ -266,37 +266,29 @@ fn fetch_and_verify(
     };
 
     /*
-     * Update progress output, with simple output for non-ttys.
+     * Update progress output, with simple output for non-ttys.  Set the
+     * progress bar length to the expected size if available, as this helps
+     * show a useful progress bar while potential redirects are followed.
      */
+    progress.inc_length(expected_size);
     if progress.is_hidden() {
         println!("Fetching {}", &file.filename);
     } else {
         progress.println(format!("{:>12} {}", "Fetching", &file.filename));
     }
 
-    let mut updated_len = false;
     'nextsite: for site in &file.sites {
         let url = url_from_site(site, &file.filename);
         match client.get(&url).send() {
             Ok(mut body) => {
                 /*
-                 * If we haven't already done so, update the progress bar size
-                 * with the best information available.
+                 * If we don't have an expected size from distinfo then update
+                 * the progress bar with the content length, if available.
                  */
-                if !updated_len {
-                    match body.content_length() {
-                        Some(len) => {
-                            if len == 0 {
-                                progress.inc_length(fsize);
-                            } else {
-                                progress.inc_length(len);
-                            }
-                        }
-                        None => {
-                            progress.inc_length(fsize);
-                        }
+                if expected_size == 0 {
+                    if let Some(len) = body.content_length() {
+                        progress.inc_length(len);
                     }
-                    updated_len = true;
                 }
 
                 if !&body.status().is_success() {
