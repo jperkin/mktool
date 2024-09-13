@@ -16,7 +16,7 @@ edition = "2021"
 clap = { version = "4", features = ["derive"] }
 elf = "0.7.4"
 indicatif = "0.17.8"
-pkgsrc = "0.1.30"
+pkgsrc = "0.1.31"
 rayon = "1.10.0"
 reqwest = { version = "0.12.7", features = ["blocking"] }
 thiserror = "1.0.63"
