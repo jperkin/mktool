@@ -734,6 +734,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a7a70ba024b9dc04c27ea2f0c0548feb474ec5c54bba33a7f72f873a39d07b24"
 
 [[package]]
+name = "md-5"
+version = "0.10.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d89e7ee0cfbedfc4da3340218492196241d89eefb6dab27de5df917a6d2e78cf"
+dependencies = [
+ "cfg-if",
+ "digest",
+]
+
+[[package]]
 name = "memchr"
 version = "2.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -768,7 +778,7 @@ dependencies = [
 
 [[package]]
 name = "mktool"
-version = "1.0.1"
+version = "1.1.0"
 dependencies = [
  "clap",
  "elf",
@@ -907,9 +917,9 @@ checksum = "d231b230927b5e4ad203db57bbcbee2802f6bce620b1e4a9024a07d94e2907ec"
 
 [[package]]
 name = "pkgsrc"
-version = "0.1.30"
+version = "0.1.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e9a0d0a192dc35d972ea9025774a9eec988e5c9e9351c75ee34786a6879ab6b"
+checksum = "389623f2cf067901e11c7702bf17bdbc880264feb92062e46fa772fa29249cee"
 dependencies = [
  "ar",
  "blake2",
@@ -917,6 +927,7 @@ dependencies = [
  "flate2",
  "glob",
  "indexmap",
+ "md-5",
  "ripemd",
  "sha1",
  "sha2",

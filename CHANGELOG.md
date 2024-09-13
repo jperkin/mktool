@@ -1,3 +1,12 @@
+## Version 1.1.0 (2024-09-13)
+
+ * digest: Add new "mktool digest" command.  Aims for compatibility with
+   pkgtools/digest, and should already serve as a drop-in replacement.
+
+ * Update pkgsrc-rs and simplify some code accordingly.
+
+ * Add note on Minimum Rust Supported Version (1.74.0).
+
 ## Version 1.0.1 (2024-09-13)
 
  * fetch: Use a shared client instance, improves performance quite a bit.
