@@ -247,6 +247,8 @@ fn fetch_and_verify(
                 Ok(s) => return Ok(s),
                 Err(_) => fs::remove_file(&file_name)?,
             }
+        } else {
+            return Ok(file_name.metadata()?.len());
         }
     }
 
