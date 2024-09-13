@@ -174,7 +174,7 @@ impl DistInfo {
                 if let Some(filename) = path.file_name() {
                     let entry = Entry::new(
                         PathBuf::from(filename),
-                        path.to_path_buf(),
+                        path,
                         patchsums.clone(),
                         None,
                     );
