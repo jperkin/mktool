@@ -265,27 +265,19 @@ fn fetch_and_verify(
         0
     };
 
+    /*
+     * Update progress output, with simple output for non-ttys.
+     */
+    if progress.is_hidden() {
+        println!("Fetching {}", &file.filename);
+    } else {
+        progress.println(format!("{:>12} {}", "Fetching", &file.filename));
+    }
+
     let mut updated_len = false;
-    let mut printed_msg = false;
     'nextsite: for site in &file.sites {
         let url = url_from_site(site, &file.filename);
-        /*
-         * Update the progress message only after the initial get() returns,
-         * otherwise there is a noticeable delay between first printing the
-         * "Downloading ..." progress bar and it updating with the first file.
-         */
-        let fetch = client.get(&url).send();
-        if !printed_msg {
-            if progress.is_hidden() {
-                /* Simple output for non-ttys. */
-                println!("Fetching {}", &file.filename);
-            } else {
-                progress
-                    .println(format!("{:>12} {}", "Fetching", &file.filename));
-            }
-            printed_msg = true;
-        }
-        match fetch {
+        match client.get(&url).send() {
             Ok(mut body) => {
                 /*
                  * If we haven't already done so, update the progress bar size
