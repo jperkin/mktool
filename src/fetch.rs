@@ -72,12 +72,9 @@ impl Fetch {
         let started = Instant::now();
         let mut files: Vec<FetchFile> = vec![];
 
-        let distinfo = match &self.distinfo {
-            Some(s) => Distinfo::from_bytes(
-                &fs::read(s).expect("unable to read distinfo"),
-            ),
-            None => Distinfo::new(),
-        };
+        let distinfo = self.distinfo.as_ref().map(|s| {
+            Distinfo::from_bytes(&fs::read(s).expect("unable to read distinfo"))
+        });
 
         if let Some(input) = &self.input {
             let reader: Box<dyn io::BufRead> = match input.to_str() {
@@ -225,7 +222,7 @@ fn url_from_site(site: &str, filename: &str) -> String {
 fn fetch_and_verify(
     client: &Client,
     file: &FetchFile,
-    distinfo: &Distinfo,
+    distinfo: &Option<Distinfo>,
     progress: &ProgressBar,
 ) -> Result<u64, FetchError> {
     // Set the target filename
@@ -245,9 +242,11 @@ fn fetch_and_verify(
      * verify that it is), otherwise remove and retry.
      */
     if file_name.exists() {
-        match distinfo.verify_size(&file_name) {
-            Ok(s) => return Ok(s),
-            Err(_) => fs::remove_file(&file_name)?,
+        if let Some(di) = distinfo {
+            match di.verify_size(&file_name) {
+                Ok(s) => return Ok(s),
+                Err(_) => fs::remove_file(&file_name)?,
+            }
         }
     }
 
@@ -257,9 +256,13 @@ fn fetch_and_verify(
      * we have recorded in distinfo.  If neither are available then we have
      * no choice but to leave it at zero.
      */
-    let fsize = match distinfo.get_distfile(&file.filepath) {
-        Some(e) => e.size.unwrap_or(0),
-        None => 0,
+    let fsize = if let Some(di) = distinfo {
+        match di.get_distfile(&file.filepath) {
+            Some(e) => e.size.unwrap_or(0),
+            None => 0,
+        }
+    } else {
+        0
     };
 
     let mut updated_len = false;
@@ -320,12 +323,14 @@ fn fetch_and_verify(
                  */
                 let file = File::create(&file_name)?;
                 body.copy_to(&mut progress.wrap_write(&file))?;
-                for result in distinfo.verify_checksums(&file_name) {
-                    if let Err(e) = result {
-                        progress.suspend(|| {
-                            eprintln!("Verification failed for {url}: {e}");
-                        });
-                        continue 'nextsite;
+                if let Some(di) = distinfo {
+                    for result in di.verify_checksums(&file_name) {
+                        if let Err(e) = result {
+                            progress.suspend(|| {
+                                eprintln!("Verification failed for {url}: {e}");
+                            });
+                            continue 'nextsite;
+                        }
                     }
                 }
                 return Ok(file.metadata()?.len());
