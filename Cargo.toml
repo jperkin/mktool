@@ -9,6 +9,7 @@ license = "ISC"
 repository = "https://github.com/jperkin/mktool"
 homepage = "https://github.com/jperkin/mktool"
 documentation = "https://docs.rs/mktool"
+rust-version = "1.74.0"
 edition = "2021"
 
 [dependencies]

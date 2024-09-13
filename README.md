@@ -58,3 +58,11 @@ These are the commands currently implemented:
 All of the replacements are activated upon setting `TOOLS_PLATFORM.mktool`.
 In addition, packages no longer have build dependencies on `pkgtools/digest`
 and `pkgtools/mktools` (unless specifically requested).
+
+## Minimum Support Rust Version
+
+Currently [1.74.0](https://blog.rust-lang.org/2023/11/16/Rust-1.74.0.html).
+
+The `edition` is set to 2021, so in theory I'd like to have 1.56.0 as the
+MSRV, but newer releases are currently required due to `clap` and `tokio`
+dependency requirements.
