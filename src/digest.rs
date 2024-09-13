@@ -20,7 +20,7 @@ use pkgsrc::digest::Digest;
 use rayon::prelude::*;
 use std::env;
 use std::fs;
-use std::io::{self, Read};
+use std::io::{self, Cursor, Read};
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -54,9 +54,10 @@ impl DigestCmd {
          * calculation immediately and return.
          */
         let Some(files) = &self.files else {
-            let mut input = String::new();
-            io::stdin().read_to_string(&mut input)?;
-            println!("{}", algorithm.hash_str(&input)?);
+            let mut input = Vec::new();
+            io::stdin().read_to_end(&mut input)?;
+            let mut cursor = Cursor::new(input);
+            println!("{}", algorithm.hash_file(&mut cursor)?);
             return Ok(0);
         };
 
