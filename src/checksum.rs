@@ -91,7 +91,12 @@ impl CheckSum {
         if let Some(infile) = &self.input {
             let reader: Box<dyn io::BufRead> = match infile.to_str() {
                 Some("-") => Box::new(io::stdin().lock()),
-                Some(f) => Box::new(BufReader::new(fs::File::open(f)?)),
+                Some(f) => Box::new(BufReader::new(
+                    fs::File::open(f).unwrap_or_else(|e| {
+                        eprintln!("ERROR: Unable to read {f}: {e}");
+                        std::process::exit(1);
+                    }),
+                )),
                 None => {
                     eprintln!(
                         "ERROR: File '{}' is not valid unicode.",
