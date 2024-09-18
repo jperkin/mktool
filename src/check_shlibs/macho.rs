@@ -14,18 +14,27 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-use crate::check_shlibs::CheckShlibs;
+use crate::check_shlibs::{CheckCache, CheckShlibs};
 use goblin::mach::{Mach, SingleArch};
-use std::env;
 use std::path::Path;
 
 impl CheckShlibs {
-    pub fn verify_dso(&self, path: &Path, object: &[u8]) {
+    pub fn check_dso(
+        &self,
+        path: &Path,
+        object: &[u8],
+        cache: &mut CheckCache,
+    ) {
         let pobj = match Mach::parse(object) {
             Ok(o) => o,
             Err(_) => return,
         };
         let obj = match pobj {
+            /*
+             * XXX: Support Universal binaries correctly.  It's unlikely we'll
+             * encounter these in pkgsrc at present as there's no multiarch
+             * support.
+             */
             Mach::Fat(fat) => {
                 if let Ok(SingleArch::MachO(o)) = fat.get(0) {
                     o
@@ -40,44 +49,8 @@ impl CheckShlibs {
             if i == 0 {
                 continue;
             }
-            self.verify_lib(path, lib);
-        }
-    }
-
-    fn verify_lib(&self, obj: &Path, lib: &str) {
-        /*
-         * Skip system libraries if requested on newer macOS.  Apple no
-         * longer ship the actual file system entries (because lol) so the
-         * existence test later on will fail.
-         */
-        if env::var("SKIP_SYSTEM_LIBS").is_ok()
-            && (lib.starts_with("/System/Library")
-                || lib.starts_with("/usr/lib"))
-        {
-            return;
-        }
-
-        /*
-         * Library paths must not start with WRKDIR.
-         */
-        if let Ok(wrkdir) = env::var("WRKDIR") {
-            if lib.starts_with(&wrkdir) {
-                println!("{}: path relative to WRKDIR: {}", obj.display(), lib);
-            }
-        }
-
-        /*
-         * Library paths must be absolute.
-         */
-        if !lib.starts_with("/") {
-            println!("{}: relative library path: {}", obj.display(), lib);
-        }
-
-        /*
-         * Library paths must exist.
-         */
-        if !Path::new(lib).exists() {
-            println!("{}: missing library: {}", obj.display(), lib);
+            let libpath = Path::new(lib);
+            self.check_shlib(path, libpath, cache);
         }
     }
 }

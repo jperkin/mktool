@@ -14,44 +14,46 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-use crate::check_shlibs::CheckShlibs;
+use crate::check_shlibs::{CheckCache, CheckShlibs};
 use goblin::elf::Elf;
 use std::env;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 impl CheckShlibs {
-    pub fn verify_dso(&self, path: &Path, object: &[u8]) {
-        let elf = match Elf::parse(&object) {
-            Ok(o) => ok,
+    pub fn check_dso(
+        &self,
+        path: &Path,
+        object: &[u8],
+        cache: &mut CheckCache,
+    ) {
+        let elf = match Elf::parse(object) {
+            Ok(o) => o,
             Err(_) => return,
         };
-        for lib in elf.libraries {
-            self.verify_lib(path, lib);
-        }
-    }
-
-    fn verify_lib(&self, obj: &Path, lib: &str) {
-        /*
-         * Library paths must not start with WRKDIR.
-         */
-        if let Ok(wrkdir) = env::var("WRKDIR") {
-            if lib.starts_with(&wrkdir) {
-                println!("{}: path relative to WRKDIR: {}", obj.display(), lib);
+        let mut rpaths: Vec<String> = match elf.runpaths.first() {
+            Some(p) => p.split(':').map(|s| s.to_string()).collect(),
+            None => vec![],
+        };
+        if let Ok(paths) = env::var("PLATFORM_RPATH") {
+            for path in paths.split(':').collect::<Vec<&str>>() {
+                rpaths.push(path.to_string());
             }
         }
 
-        /*
-         * Library paths must be absolute.
-         */
-        if !lib.starts_with("/") {
-            println!("{}: relative library path: {}", obj.display(), lib);
-        }
-
-        /*
-         * Library paths must exist.
-         */
-        if !Path::new(lib).exists() {
-            println!("{}: missing library: {}", obj.display(), lib);
+        for lib in elf.libraries {
+            let mut found = false;
+            for rpath in &rpaths {
+                let mut libpath = PathBuf::from(rpath);
+                libpath.push(lib);
+                println!("==> {}", libpath.display());
+                if libpath.exists() {
+                    self.check_shlib(path, &libpath, cache);
+                    found = true;
+                }
+            }
+            if !found {
+                println!("{}: missing library: {}", path.display(), lib);
+            }
         }
     }
 }
