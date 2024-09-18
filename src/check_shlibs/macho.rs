@@ -14,38 +14,42 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-use clap::Args;
-use goblin::mach::Mach;
+use crate::check_shlibs::CheckShlibs;
+use goblin::mach::{Mach, SingleArch};
 use std::env;
-use std::fs;
-use std::io::{self, BufRead};
 use std::path::Path;
 
-#[derive(Args, Debug)]
-pub struct CheckShlibs {
-    #[arg(short = 'j', value_name = "jobs")]
-    #[arg(help = "Maximum number of threads (or \"MKTOOL_JOBS\" env var)")]
-    jobs: Option<usize>,
-}
-
 impl CheckShlibs {
-    /**
-     * Verify a library dependency for an object.  Print any errors to stdout,
-     * as that is the way this has been designed to work for some reason.
-     */
-    fn verify_lib(&self, obj: &Path, lib: &str) {
-        /* "self" is seen as the first entry on macOS. */
-        #[cfg(target_os = "macos")]
-        if lib == "self" {
-            return;
+    pub fn verify_dso(&self, path: &Path, object: &[u8]) {
+        let pobj = match Mach::parse(object) {
+            Ok(o) => o,
+            Err(_) => return,
+        };
+        let obj = match pobj {
+            Mach::Fat(fat) => {
+                if let Ok(SingleArch::MachO(o)) = fat.get(0) {
+                    o
+                } else {
+                    return;
+                }
+            }
+            Mach::Binary(bin) => bin,
+        };
+        for (i, lib) in obj.libs.into_iter().enumerate() {
+            /* Always skip the first entry on macOS, "self" */
+            if i == 0 {
+                continue;
+            }
+            self.verify_lib(path, lib);
         }
+    }
 
+    fn verify_lib(&self, obj: &Path, lib: &str) {
         /*
          * Skip system libraries if requested on newer macOS.  Apple no
-         * longer ship the actual file system entries so we can't test for
-         * them in any reasonable way.
+         * longer ship the actual file system entries (because lol) so the
+         * existence test later on will fail.
          */
-        #[cfg(target_os = "macos")]
         if env::var("SKIP_SYSTEM_LIBS").is_ok()
             && (lib.starts_with("/System/Library")
                 || lib.starts_with("/usr/lib"))
@@ -75,35 +79,5 @@ impl CheckShlibs {
         if !Path::new(lib).exists() {
             println!("{}: missing library: {}", obj.display(), lib);
         }
-    }
-
-    pub fn run(&self) -> Result<i32, Box<dyn std::error::Error>> {
-        for line in io::stdin().lock().lines() {
-            let line = line?;
-            let path = Path::new(&line);
-            let file = fs::read(path)?;
-            let m = Mach::parse(&file).unwrap_or_else(|err| {
-                eprintln!("ERROR: Unable to parse {}: {err}", path.display());
-                std::process::exit(1);
-            });
-
-            let obj = match m {
-                Mach::Fat(fat) => {
-                    let ojnk = fat.get(0);
-                    if let Ok(goblin::mach::SingleArch::MachO(o)) = ojnk {
-                        o
-                    } else {
-                        eprintln!("ERROR: {line} is unsupported");
-                        std::process::exit(1);
-                    }
-                }
-                Mach::Binary(bin) => bin,
-            };
-            for lib in &obj.libs {
-                self.verify_lib(path, lib);
-            }
-        }
-
-        Ok(0)
     }
 }
