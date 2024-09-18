@@ -49,7 +49,7 @@ impl CheckShlibs {
      * See if this library path belongs to a package.  If it does, ensure
      * that the package is a runtime dependency.
      */
-    pub fn check_pkg(&self, obj: &Path, lib: &Path, cache: &mut CheckCache) {
+    fn check_pkg(&self, obj: &Path, lib: &Path, cache: &mut CheckCache) {
         /*
          * Look for an existing cached entry for this library.
          */
@@ -106,20 +106,7 @@ impl CheckShlibs {
         );
     }
 
-    fn check_shlib(&self, obj: &Path, lib: &Path, cache: &mut CheckCache) {
-        /*
-         * Skip system libraries if requested on newer macOS.  Apple no
-         * longer ship the actual file system entries (because lol) so the
-         * existence test later on will fail.
-         */
-        #[cfg(target_os = "macos")]
-        if std::env::var("SKIP_SYSTEM_LIBS").is_ok()
-            && (lib.starts_with("/System/Library")
-                || lib.starts_with("/usr/lib"))
-        {
-            return;
-        }
-
+    fn check_shlib(&self, obj: &Path, lib: &Path) {
         /*
          * Library paths must not start with WRKDIR.
          */
@@ -150,11 +137,6 @@ impl CheckShlibs {
         if !lib.exists() {
             println!("{}: missing library: {}", obj.display(), lib.display());
         }
-
-        /*
-         * Verify package DEPENDS are correct.
-         */
-        self.check_pkg(obj, lib, cache);
     }
 
     pub fn run(&self) -> Result<i32, Box<dyn std::error::Error>> {

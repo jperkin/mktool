@@ -49,8 +49,22 @@ impl CheckShlibs {
             if i == 0 {
                 continue;
             }
+
+            /*
+             * Skip system libraries if requested on newer macOS.  Apple no
+             * longer ship the actual file system entries (because lol) so any
+             * existence test later on will fail.
+             */
+            if std::env::var("SKIP_SYSTEM_LIBS").is_ok()
+                && (lib.starts_with("/System/Library")
+                    || lib.starts_with("/usr/lib"))
+            {
+                continue;
+            }
+
             let libpath = Path::new(lib);
-            self.check_shlib(path, libpath, cache);
+            self.check_shlib(path, libpath);
+            self.check_pkg(path, libpath, cache);
         }
     }
 }

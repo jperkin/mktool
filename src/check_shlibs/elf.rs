@@ -30,27 +30,53 @@ impl CheckShlibs {
             Ok(o) => o,
             Err(_) => return,
         };
-        let mut rpaths: Vec<String> = match elf.runpaths.first() {
+        let runpath: Vec<String> = match elf.runpaths.first() {
             Some(p) => p.split(':').map(|s| s.to_string()).collect(),
             None => vec![],
         };
+        let mut syspath: Vec<String> = vec![];
         if let Ok(paths) = env::var("PLATFORM_RPATH") {
             for path in paths.split(':').collect::<Vec<&str>>() {
-                rpaths.push(path.to_string());
+                syspath.push(path.to_string());
             }
         }
 
-        for lib in elf.libraries {
+        /*
+         * With ELF we have a list of library requirements, and a list of paths
+         * to search for them.  Try the paths from RUNPATH first, before
+         * falling back to the system paths if still unresolved.  Only check
+         * for package dependencies for RUNPATH paths.
+         */
+        'nextlib: for lib in elf.libraries {
             let mut found = false;
-            for rpath in &rpaths {
+
+            /*
+             * RUNPATH entries.
+             */
+            for rpath in &runpath {
                 let mut libpath = PathBuf::from(rpath);
                 libpath.push(lib);
-                println!("==> {}", libpath.display());
                 if libpath.exists() {
-                    self.check_shlib(path, &libpath, cache);
+                    self.check_shlib(path, &libpath);
+                    self.check_pkg(path, &libpath, cache);
                     found = true;
+                    continue 'nextlib;
                 }
             }
+
+            /*
+             * PLATFORM_RPATH entries.
+             */
+            for rpath in &syspath {
+                let mut libpath = PathBuf::from(rpath);
+                libpath.push(lib);
+                if libpath.exists() {
+                    self.check_shlib(path, &libpath);
+                    found = true;
+                    continue 'nextlib;
+                }
+            }
+
             if !found {
                 println!("{}: missing library: {}", path.display(), lib);
             }
