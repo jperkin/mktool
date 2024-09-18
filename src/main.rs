@@ -14,7 +14,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-mod checkshlibs;
+mod check_shlibs;
 mod checksum;
 mod ctfconvert;
 mod digest;
@@ -42,7 +42,7 @@ pub struct Cli {
 enum Commands {
     /// Perform shared library checks
     #[command(name = "check-shlibs")]
-    CheckShlibs(checkshlibs::CheckShlibs),
+    CheckShlibs(check_shlibs::CheckShlibs),
     /// Verify checksums from a distinfo file.
     CheckSum(checksum::CheckSum),
     /// Convert DWARF debug information in binary files to CTF.
