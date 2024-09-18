@@ -22,7 +22,6 @@ use rayon::prelude::*;
 use std::collections::HashSet;
 use std::env;
 use std::fs;
-use std::fs::File;
 use std::io::{self, BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -127,7 +126,7 @@ impl DistInfo {
             let reader: Box<dyn io::BufRead> = match infile.to_str() {
                 Some("-") => Box::new(io::stdin().lock()),
                 Some(f) => Box::new(BufReader::new(
-                    File::open(f).unwrap_or_else(|e| {
+                    fs::File::open(f).unwrap_or_else(|e| {
                         eprintln!("ERROR: Unable to read {f}: {e}");
                         std::process::exit(1);
                     }),
