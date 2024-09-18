@@ -14,6 +14,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+mod checkshlibs;
 mod checksum;
 mod ctfconvert;
 mod digest;
@@ -39,6 +40,9 @@ pub struct Cli {
 #[derive(Debug, Subcommand)]
 #[command(rename_all = "lower")]
 enum Commands {
+    /// Perform shared library checks
+    #[command(name = "check-shlibs")]
+    CheckShlibs(checkshlibs::CheckShlibs),
     /// Verify checksums from a distinfo file.
     CheckSum(checksum::CheckSum),
     /// Convert DWARF debug information in binary files to CTF.
@@ -57,6 +61,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
     let rv = match &cli.command {
+        Commands::CheckShlibs(cmd) => cmd.run()?,
         Commands::CheckSum(cmd) => cmd.run()?,
         Commands::CTFConvert(cmd) => cmd.run()?,
         Commands::Digest(cmd) => cmd.run()?,
