@@ -111,7 +111,7 @@ impl CheckShlibs {
          * Library paths must not start with WRKDIR.
          */
         if let Ok(wrkdir) = std::env::var("WRKDIR") {
-            if lib.starts_with(&wrkdir) {
+            if lib.starts_with(wrkdir) {
                 println!(
                     "{}: path relative to WRKDIR: {}",
                     obj.display(),

@@ -48,8 +48,6 @@ impl CheckShlibs {
          * for package dependencies for RUNPATH paths.
          */
         'nextlib: for lib in elf.libraries {
-            let mut found = false;
-
             /*
              * RUNPATH entries.
              */
@@ -59,7 +57,6 @@ impl CheckShlibs {
                 if libpath.exists() {
                     self.check_shlib(path, &libpath);
                     self.check_pkg(path, &libpath, cache);
-                    found = true;
                     continue 'nextlib;
                 }
             }
@@ -72,14 +69,14 @@ impl CheckShlibs {
                 libpath.push(lib);
                 if libpath.exists() {
                     self.check_shlib(path, &libpath);
-                    found = true;
                     continue 'nextlib;
                 }
             }
 
-            if !found {
-                println!("{}: missing library: {}", path.display(), lib);
-            }
+            /*
+             * If we're still here it wasn't found.
+             */
+            println!("{}: missing library: {}", path.display(), lib);
         }
     }
 }
