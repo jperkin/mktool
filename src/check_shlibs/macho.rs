@@ -14,6 +14,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+use crate::check_shlibs::{check_pkg, check_shlib};
 use crate::check_shlibs::{CheckCache, CheckShlibs};
 use goblin::mach::{Mach, SingleArch};
 use std::path::Path;
@@ -84,8 +85,8 @@ impl CheckShlibs {
             /*
              * File exists, perform full checks.
              */
-            self.check_shlib(path, libpath);
-            self.check_pkg(path, libpath, cache);
+            check_shlib(path, libpath);
+            check_pkg(path, libpath, cache);
         }
     }
 }

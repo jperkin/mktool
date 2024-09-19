@@ -14,6 +14,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+use crate::check_shlibs::{check_pkg, check_shlib};
 use crate::check_shlibs::{CheckCache, CheckShlibs};
 use goblin::elf::Elf;
 use std::env;
@@ -54,7 +55,7 @@ impl CheckShlibs {
             for rpath in &runpath {
                 let mut libpath = PathBuf::from(rpath);
                 libpath.push(lib);
-                let exists = match cache.statlibs.get(libpath) {
+                let exists = match cache.statlibs.get(&libpath) {
                     Some(e) => *e,
                     None => {
                         let e = libpath.exists();
@@ -63,8 +64,8 @@ impl CheckShlibs {
                     }
                 };
                 if exists {
-                    self.check_shlib(path, &libpath);
-                    self.check_pkg(path, &libpath, cache);
+                    check_shlib(path, &libpath);
+                    check_pkg(path, &libpath, cache);
                     continue 'nextlib;
                 }
             }
@@ -75,7 +76,7 @@ impl CheckShlibs {
             for rpath in &syspath {
                 let mut libpath = PathBuf::from(rpath);
                 libpath.push(lib);
-                let exists = match cache.statlibs.get(libpath) {
+                let exists = match cache.statlibs.get(&libpath) {
                     Some(e) => *e,
                     None => {
                         let e = libpath.exists();
@@ -84,7 +85,7 @@ impl CheckShlibs {
                     }
                 };
                 if exists {
-                    self.check_shlib(path, &libpath);
+                    check_shlib(path, &libpath);
                     continue 'nextlib;
                 }
             }

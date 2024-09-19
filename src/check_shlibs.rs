@@ -46,94 +46,110 @@ pub struct CheckCache {
     pkglibs: HashMap<PathBuf, Option<String>>,
 }
 
-impl CheckShlibs {
-    /**
-     * See if this library path belongs to a package.  If it does, ensure
-     * that the package is a runtime dependency.
+/**
+ * See if this library path belongs to a package.  If it does, ensure
+ * that the package is a runtime dependency.
+ */
+fn check_pkg<P1, P2>(obj: P1, lib: P2, cache: &mut CheckCache) -> bool
+where
+    P1: AsRef<Path>,
+    P2: AsRef<Path>,
+{
+    /*
+     * Look for an existing cached entry for this library.
      */
-    fn check_pkg(&self, obj: &Path, lib: &Path, cache: &mut CheckCache) {
+    let pkgname = if let Some(entry) = cache.pkglibs.get(lib.as_ref()) {
+        match entry {
+            Some(p) => p.to_string(),
+            /* Not a pkgsrc library, return early. */
+            None => return true,
+        }
+    } else {
         /*
-         * Look for an existing cached entry for this library.
+         * No cached entry, execute pkg_info to find out if it's a
+         * pkgsrc library and store back to the cache accordingly.
          */
-        let pkgname = if let Some(entry) = cache.pkglibs.get(lib) {
-            match entry {
-                Some(p) => p.to_string(),
-                /* Not a pkgsrc library, return early. */
-                None => return,
-            }
+        let cmd = Command::new(&cache.pkginfo)
+            .arg("-Fe")
+            .arg(lib.as_ref())
+            .output()
+            .expect("Unable to execute pkg_info");
+
+        if let Some(0) = cmd.status.code() {
+            let p = String::from_utf8(cmd.stdout)
+                .expect("Invalid pkgname")
+                .trim()
+                .to_string();
+            cache
+                .pkglibs
+                .insert(lib.as_ref().to_path_buf(), Some(p.clone()));
+            p
         } else {
-            /*
-             * No cached entry, execute pkg_info to find out if it's a
-             * pkgsrc library and store back to the cache accordingly.
-             */
-            let cmd = Command::new(&cache.pkginfo)
-                .arg("-Fe")
-                .arg(lib)
-                .output()
-                .expect("Unable to execute pkg_info");
-
-            if let Some(0) = cmd.status.code() {
-                let p = String::from_utf8(cmd.stdout)
-                    .expect("Invalid pkgname")
-                    .trim()
-                    .to_string();
-                cache.pkglibs.insert(lib.to_path_buf(), Some(p.clone()));
-                p
-            } else {
-                cache.pkglibs.insert(lib.to_path_buf(), None);
-                return;
-            }
-        };
-
-        /*
-         * If we depend on a pkgsrc library then it must be a full
-         * dependency.  Verify that it is.
-         */
-        for dep in &cache.depends {
-            if dep.2 == pkgname && (dep.0 == "full" || dep.0 == "implicit-full")
-            {
-                return;
-            }
+            cache.pkglibs.insert(lib.as_ref().to_path_buf(), None);
+            return true;
         }
+    };
 
-        /*
-         * If we didn't already exit early then this is a pkgsrc dependency
-         * that is not correctly registered.
-         */
-        println!(
-            "{}: {}: {} is not a runtime dependency",
-            obj.display(),
-            lib.display(),
-            pkgname
-        );
+    /*
+     * If we depend on a pkgsrc library then it must be a full
+     * dependency.  Verify that it is.
+     */
+    for dep in &cache.depends {
+        if dep.2 == pkgname && (dep.0 == "full" || dep.0 == "implicit-full") {
+            return true;
+        }
     }
 
-    fn check_shlib(&self, obj: &Path, lib: &Path) {
-        /*
-         * Library paths must not start with WRKDIR.
-         */
-        if let Ok(wrkdir) = std::env::var("WRKDIR") {
-            if lib.starts_with(wrkdir) {
-                println!(
-                    "{}: path relative to WRKDIR: {}",
-                    obj.display(),
-                    lib.display()
-                );
-            }
-        }
+    /*
+     * If we didn't already exit early then this is a pkgsrc dependency
+     * that is not correctly registered.
+     */
+    println!(
+        "{}: {}: {} is not a runtime dependency",
+        obj.as_ref().display(),
+        lib.as_ref().display(),
+        pkgname
+    );
+    false
+}
 
-        /*
-         * Library paths must be absolute.
-         */
-        if !lib.starts_with("/") {
+fn check_shlib<P1, P2>(obj: P1, lib: P2) -> bool
+where
+    P1: AsRef<Path>,
+    P2: AsRef<Path>,
+{
+    let mut rv = true;
+
+    /*
+     * Library paths must not start with WRKDIR.
+     */
+    if let Ok(wrkdir) = std::env::var("WRKDIR") {
+        if lib.as_ref().starts_with(wrkdir) {
             println!(
-                "{}: relative library path: {}",
-                obj.display(),
-                lib.display()
+                "{}: path relative to WRKDIR: {}",
+                obj.as_ref().display(),
+                lib.as_ref().display()
             );
+            rv = false;
         }
     }
 
+    /*
+     * Library paths must be absolute.
+     */
+    if !lib.as_ref().starts_with("/") {
+        println!(
+            "{}: relative library path: {}",
+            obj.as_ref().display(),
+            lib.as_ref().display()
+        );
+        rv = false;
+    }
+
+    rv
+}
+
+impl CheckShlibs {
     pub fn run(&self) -> Result<i32, Box<dyn std::error::Error>> {
         /*
          * First verify that we have all the required environment variables
@@ -188,5 +204,27 @@ impl CheckShlibs {
         }
 
         Ok(0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_shlib() {
+        let obj = "/opt/pkg/bin/mutt";
+        /*
+         * Library paths must be absolute.
+         */
+        assert_eq!(check_shlib(obj, "libfoo.so"), false);
+        /*
+         * Library paths must not start with WRKDIR
+         */
+        unsafe {
+            std::env::set_var("WRKDIR", "/wrk");
+        }
+        assert_eq!(check_shlib(obj, "/wrk/libfoo.so"), false);
+        assert_eq!(check_shlib(obj, "/libfoo.so"), true);
     }
 }
