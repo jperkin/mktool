@@ -35,10 +35,18 @@ impl CheckShlibs {
             Some(p) => p.split(':').map(|s| s.to_string()).collect(),
             None => vec![],
         };
+
+        /*
+         * System paths are prefixed with CROSS_DESTDIR, if set.
+         */
         let mut syspath: Vec<String> = vec![];
         if let Ok(paths) = env::var("PLATFORM_RPATH") {
+            let cross_prefix = match state.cross_destdir {
+                Some(p) => p,
+                None => "".to_string(),
+            };
             for path in paths.split(':').collect::<Vec<&str>>() {
-                syspath.push(path.to_string());
+                syspath.push(cross_prefix.clone().push_str(path));
             }
         }
 
@@ -71,7 +79,30 @@ impl CheckShlibs {
             }
 
             /*
-             * PLATFORM_RPATH entries.
+             * Look inside DESTDIR for any RUNPATH entries that haven't been
+             * installed yet.
+             */
+            for rpath in &runpath {
+                let mut libpath = state.destdir.clone();
+                libpath.push(rpath);
+                libpath.push(lib);
+                let exists = match state.statlibs.get(&libpath) {
+                    Some(e) => *e,
+                    None => {
+                        let e = libpath.exists();
+                        state.statlibs.insert(libpath.to_path_buf(), e);
+                        e
+                    }
+                };
+                if exists {
+                    check_shlib(path, &libpath, state);
+                    continue 'nextlib;
+                }
+            }
+
+            /*
+             * PLATFORM_RPATH entries.  As per above these are prefixed with
+             * CROSS_DESTDIR if that is set.
              */
             for rpath in &syspath {
                 let mut libpath = PathBuf::from(rpath);

@@ -34,15 +34,35 @@ pub struct CheckShlibs {}
  * Shared state for checks.
  */
 pub struct CheckState {
+    /*
+     * CROSS_DESTDIR is used to determine the prefix for system libraries, and
+     * will be empty for a native build.  DESTDIR is the temporary directory
+     * that files are installed to prior to packaging, and is where we look for
+     * libraries required by binaries we are about to install.
+     */
+    cross_destdir: Option<PathBuf>,
+    destdir: PathBuf,
+    /*
+     * Path to pkg_info and any arguments (usually "-K /path/to/pkgdb")
+     */
     pkg_info_cmd: PathBuf,
     pkg_info_args: Vec<String>,
-    /* _RRDEPENDS_FILE format: "deptype pkgmatch pkg" */
+    /*
+     * The _RRDEPENDS_FILE.  Format is "deptype pkgmatch pkg"
+     */
     depends: Vec<(String, String, String)>,
-    /* List of toxic library path matches */
+    /*
+     * List of toxic library path regular expression matches.
+     */
     toxic: Vec<Regex>,
-    /* Have we already tested for this library path existence? */
+    /*
+     * Cache stat(2) lookups, storing whether file exists or not.
+     */
     statlibs: HashMap<PathBuf, bool>,
-    /* Have we already resolved this library path to a package name? */
+    /*
+     * Cache pkg_info lookups, storing optional package name that this file
+     * belongs to.
+     */
     pkglibs: HashMap<PathBuf, Option<String>>,
 }
 
@@ -173,6 +193,21 @@ impl CheckShlibs {
          * First verify that we have all the required environment variables
          * set, and perform initial configuration of them.
          */
+        let destdir = match std::env::var("DESTDIR") {
+            Ok(s) => PathBuf::from(s),
+            Err(_) => {
+                eprintln!("DESTDIR is mandatory");
+                std::process::exit(1);
+            }
+        };
+        let cross_destdir = match std::env::var("CROSS_DESTDIR") {
+            Ok(s) => Some(PathBuf::from(s)),
+            Err(_) => {
+                eprintln!("CROSS_DESTDIR is mandatory");
+                std::process::exit(1);
+            }
+        };
+
         let pkg_info_cmd: PathBuf;
         let mut pkg_info_args = vec![];
         match std::env::var("PKG_INFO_CMD") {
@@ -234,6 +269,8 @@ impl CheckShlibs {
         };
 
         let mut state = CheckState {
+            destdir,
+            cross_destdir,
             pkg_info_cmd,
             pkg_info_args,
             depends,
@@ -264,6 +301,8 @@ mod tests {
     #[test]
     fn test_shlib() {
         let state = CheckState {
+            cross_destdir: None,
+            destdir: PathBuf::from("/destdir"),
             pkg_info_cmd: PathBuf::from("/notyet"),
             pkg_info_args: vec![],
             depends: vec![],
