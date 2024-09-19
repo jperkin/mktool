@@ -203,11 +203,11 @@ impl Fetch {
  */
 fn url_from_site(site: &str, filename: &str) -> String {
     let mut url = String::new();
-    if let Some(s) = site.strip_prefix("-") {
+    if let Some(s) = site.strip_prefix('-') {
         url.push_str(s);
     } else {
         url.push_str(site);
-        if !site.ends_with("/") {
+        if !site.ends_with('/') {
             url.push('/');
         }
         url.push_str(filename);
