@@ -39,14 +39,16 @@ impl CheckShlibs {
         /*
          * System paths are prefixed with CROSS_DESTDIR, if set.
          */
-        let mut syspath: Vec<String> = vec![];
+        let mut syspath: Vec<PathBuf> = vec![];
         if let Ok(paths) = env::var("PLATFORM_RPATH") {
-            let cross_prefix = match state.cross_destdir {
-                Some(p) => p,
-                None => "".to_string(),
+            let cross_prefix = match &state.cross_destdir {
+                Some(p) => p.clone(),
+                None => PathBuf::new(),
             };
-            for path in paths.split(':').collect::<Vec<&str>>() {
-                syspath.push(cross_prefix.clone().push_str(path));
+            for p in paths.split(':').collect::<Vec<&str>>() {
+                let mut path = cross_prefix.clone();
+                path.push(p);
+                syspath.push(path);
             }
         }
 
@@ -80,11 +82,16 @@ impl CheckShlibs {
 
             /*
              * Look inside DESTDIR for any RUNPATH entries that haven't been
-             * installed yet.
+             * installed yet.  All we can do is check for existence, as they
+             * will clearly fall foul of e.g. WRKDIR checks.
              */
             for rpath in &runpath {
                 let mut libpath = state.destdir.clone();
-                libpath.push(rpath);
+                let rp = PathBuf::from(rpath);
+                match rp.strip_prefix("/") {
+                    Ok(p) => libpath.push(p),
+                    Err(_) => libpath.push(rp),
+                }
                 libpath.push(lib);
                 let exists = match state.statlibs.get(&libpath) {
                     Some(e) => *e,
@@ -95,14 +102,14 @@ impl CheckShlibs {
                     }
                 };
                 if exists {
-                    check_shlib(path, &libpath, state);
                     continue 'nextlib;
                 }
             }
 
             /*
              * PLATFORM_RPATH entries.  As per above these are prefixed with
-             * CROSS_DESTDIR if that is set.
+             * CROSS_DESTDIR if that is set, and we only perform shlib checks
+             * on them.
              */
             for rpath in &syspath {
                 let mut libpath = PathBuf::from(rpath);
