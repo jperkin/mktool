@@ -62,7 +62,28 @@ impl CheckShlibs {
                 continue;
             }
 
+            /*
+             * As library paths on macOS are always fully specified, check that
+             * they exist, caching seen entries - stat isn't cheap!
+             */
             let libpath = Path::new(lib);
+            let exists = match cache.statlibs.get(libpath) {
+                Some(e) => *e,
+                None => {
+                    let e = libpath.exists();
+                    cache.statlibs.insert(libpath.to_path_buf(), e);
+                    e
+                }
+            };
+
+            if !exists {
+                println!("{}: missing library: {}", path.display(), lib);
+                continue;
+            }
+
+            /*
+             * File exists, perform full checks.
+             */
             self.check_shlib(path, libpath);
             self.check_pkg(path, libpath, cache);
         }

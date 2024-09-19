@@ -54,7 +54,15 @@ impl CheckShlibs {
             for rpath in &runpath {
                 let mut libpath = PathBuf::from(rpath);
                 libpath.push(lib);
-                if libpath.exists() {
+                let exists = match cache.statlibs.get(libpath) {
+                    Some(e) => *e,
+                    None => {
+                        let e = libpath.exists();
+                        cache.statlibs.insert(libpath.to_path_buf(), e);
+                        e
+                    }
+                };
+                if exists {
                     self.check_shlib(path, &libpath);
                     self.check_pkg(path, &libpath, cache);
                     continue 'nextlib;
@@ -67,7 +75,15 @@ impl CheckShlibs {
             for rpath in &syspath {
                 let mut libpath = PathBuf::from(rpath);
                 libpath.push(lib);
-                if libpath.exists() {
+                let exists = match cache.statlibs.get(libpath) {
+                    Some(e) => *e,
+                    None => {
+                        let e = libpath.exists();
+                        cache.statlibs.insert(libpath.to_path_buf(), e);
+                        e
+                    }
+                };
+                if exists {
                     self.check_shlib(path, &libpath);
                     continue 'nextlib;
                 }

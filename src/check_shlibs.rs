@@ -40,6 +40,8 @@ pub struct CheckCache {
     pkginfo: PathBuf,
     /* _RRDEPENDS_FILE format: "deptype pkgmatch pkg" */
     depends: Vec<(String, String, String)>,
+    /* Have we already tested for this library path existence? */
+    statlibs: HashMap<PathBuf, bool>,
     /* Have we already resolved this library path to a package name? */
     pkglibs: HashMap<PathBuf, Option<String>>,
 }
@@ -130,13 +132,6 @@ impl CheckShlibs {
                 lib.display()
             );
         }
-
-        /*
-         * Library paths must exist.
-         */
-        if !lib.exists() {
-            println!("{}: missing library: {}", obj.display(), lib.display());
-        }
     }
 
     pub fn run(&self) -> Result<i32, Box<dyn std::error::Error>> {
@@ -177,6 +172,7 @@ impl CheckShlibs {
         let mut cache = CheckCache {
             pkginfo,
             depends,
+            statlibs: HashMap::new(),
             pkglibs: HashMap::new(),
         };
 
