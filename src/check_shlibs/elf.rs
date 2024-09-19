@@ -15,7 +15,7 @@
  */
 
 use crate::check_shlibs::{check_pkg, check_shlib};
-use crate::check_shlibs::{CheckCache, CheckShlibs};
+use crate::check_shlibs::{CheckShlibs, CheckState};
 use goblin::elf::Elf;
 use std::env;
 use std::path::{Path, PathBuf};
@@ -25,7 +25,7 @@ impl CheckShlibs {
         &self,
         path: &Path,
         object: &[u8],
-        cache: &mut CheckCache,
+        state: &mut CheckState,
     ) {
         let elf = match Elf::parse(object) {
             Ok(o) => o,
@@ -55,17 +55,17 @@ impl CheckShlibs {
             for rpath in &runpath {
                 let mut libpath = PathBuf::from(rpath);
                 libpath.push(lib);
-                let exists = match cache.statlibs.get(&libpath) {
+                let exists = match state.statlibs.get(&libpath) {
                     Some(e) => *e,
                     None => {
                         let e = libpath.exists();
-                        cache.statlibs.insert(libpath.to_path_buf(), e);
+                        state.statlibs.insert(libpath.to_path_buf(), e);
                         e
                     }
                 };
                 if exists {
-                    check_shlib(path, &libpath);
-                    check_pkg(path, &libpath, cache);
+                    check_shlib(path, &libpath, state);
+                    check_pkg(path, &libpath, state);
                     continue 'nextlib;
                 }
             }
@@ -76,16 +76,16 @@ impl CheckShlibs {
             for rpath in &syspath {
                 let mut libpath = PathBuf::from(rpath);
                 libpath.push(lib);
-                let exists = match cache.statlibs.get(&libpath) {
+                let exists = match state.statlibs.get(&libpath) {
                     Some(e) => *e,
                     None => {
                         let e = libpath.exists();
-                        cache.statlibs.insert(libpath.to_path_buf(), e);
+                        state.statlibs.insert(libpath.to_path_buf(), e);
                         e
                     }
                 };
                 if exists {
-                    check_shlib(path, &libpath);
+                    check_shlib(path, &libpath, state);
                     continue 'nextlib;
                 }
             }

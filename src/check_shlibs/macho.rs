@@ -15,7 +15,7 @@
  */
 
 use crate::check_shlibs::{check_pkg, check_shlib};
-use crate::check_shlibs::{CheckCache, CheckShlibs};
+use crate::check_shlibs::{CheckShlibs, CheckState};
 use goblin::mach::{Mach, SingleArch};
 use std::path::Path;
 
@@ -24,7 +24,7 @@ impl CheckShlibs {
         &self,
         path: &Path,
         object: &[u8],
-        cache: &mut CheckCache,
+        state: &mut CheckState,
     ) {
         let pobj = match Mach::parse(object) {
             Ok(o) => o,
@@ -68,11 +68,11 @@ impl CheckShlibs {
              * they exist, caching seen entries - stat isn't cheap!
              */
             let libpath = Path::new(lib);
-            let exists = match cache.statlibs.get(libpath) {
+            let exists = match state.statlibs.get(libpath) {
                 Some(e) => *e,
                 None => {
                     let e = libpath.exists();
-                    cache.statlibs.insert(libpath.to_path_buf(), e);
+                    state.statlibs.insert(libpath.to_path_buf(), e);
                     e
                 }
             };
@@ -85,8 +85,8 @@ impl CheckShlibs {
             /*
              * File exists, perform full checks.
              */
-            check_shlib(path, libpath);
-            check_pkg(path, libpath, cache);
+            check_shlib(path, libpath, state);
+            check_pkg(path, libpath, state);
         }
     }
 }

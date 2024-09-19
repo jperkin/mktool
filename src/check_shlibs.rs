@@ -20,6 +20,7 @@ mod elf;
 mod macho;
 
 use clap::Args;
+use regex::Regex;
 use std::collections::HashMap;
 use std::fs;
 use std::io::{self, BufRead};
@@ -27,19 +28,17 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 #[derive(Args, Debug)]
-pub struct CheckShlibs {
-    #[arg(short = 'j', value_name = "jobs")]
-    #[arg(help = "Maximum number of threads (or \"MKTOOL_JOBS\" env var)")]
-    jobs: Option<usize>,
-}
+pub struct CheckShlibs {}
 
 /*
  * Shared state for checks.
  */
-pub struct CheckCache {
+pub struct CheckState {
     pkginfo: PathBuf,
     /* _RRDEPENDS_FILE format: "deptype pkgmatch pkg" */
     depends: Vec<(String, String, String)>,
+    /* List of toxic library path matches */
+    toxic: Vec<Regex>,
     /* Have we already tested for this library path existence? */
     statlibs: HashMap<PathBuf, bool>,
     /* Have we already resolved this library path to a package name? */
@@ -50,7 +49,7 @@ pub struct CheckCache {
  * See if this library path belongs to a package.  If it does, ensure
  * that the package is a runtime dependency.
  */
-fn check_pkg<P1, P2>(obj: P1, lib: P2, cache: &mut CheckCache) -> bool
+fn check_pkg<P1, P2>(obj: P1, lib: P2, state: &mut CheckState) -> bool
 where
     P1: AsRef<Path>,
     P2: AsRef<Path>,
@@ -58,7 +57,7 @@ where
     /*
      * Look for an existing cached entry for this library.
      */
-    let pkgname = if let Some(entry) = cache.pkglibs.get(lib.as_ref()) {
+    let pkgname = if let Some(entry) = state.pkglibs.get(lib.as_ref()) {
         match entry {
             Some(p) => p.to_string(),
             /* Not a pkgsrc library, return early. */
@@ -69,7 +68,7 @@ where
          * No cached entry, execute pkg_info to find out if it's a
          * pkgsrc library and store back to the cache accordingly.
          */
-        let cmd = Command::new(&cache.pkginfo)
+        let cmd = Command::new(&state.pkginfo)
             .arg("-Fe")
             .arg(lib.as_ref())
             .output()
@@ -80,12 +79,12 @@ where
                 .expect("Invalid pkgname")
                 .trim()
                 .to_string();
-            cache
+            state
                 .pkglibs
                 .insert(lib.as_ref().to_path_buf(), Some(p.clone()));
             p
         } else {
-            cache.pkglibs.insert(lib.as_ref().to_path_buf(), None);
+            state.pkglibs.insert(lib.as_ref().to_path_buf(), None);
             return true;
         }
     };
@@ -94,15 +93,15 @@ where
      * If we depend on a pkgsrc library then it must be a full
      * dependency.  Verify that it is.
      */
-    for dep in &cache.depends {
+    for dep in &state.depends {
         if dep.2 == pkgname && (dep.0 == "full" || dep.0 == "implicit-full") {
             return true;
         }
     }
 
     /*
-     * If we didn't already exit early then this is a pkgsrc dependency
-     * that is not correctly registered.
+     * If we didn't already exit early then this is a pkgsrc dependency that
+     * is not correctly registered.
      */
     println!(
         "{}: {}: {} is not a runtime dependency",
@@ -113,7 +112,7 @@ where
     false
 }
 
-fn check_shlib<P1, P2>(obj: P1, lib: P2) -> bool
+fn check_shlib<P1, P2>(obj: P1, lib: P2, state: &CheckState) -> bool
 where
     P1: AsRef<Path>,
     P2: AsRef<Path>,
@@ -129,6 +128,23 @@ where
                 "{}: path relative to WRKDIR: {}",
                 obj.as_ref().display(),
                 lib.as_ref().display()
+            );
+            rv = false;
+        }
+    }
+
+    /*
+     * Library paths must not match any that the user has marked as toxic, for
+     * example if we want to explicitly avoid linking against certain system
+     * libraries.
+     */
+    for regex in &state.toxic {
+        if regex.is_match(&lib.as_ref().to_string_lossy()) {
+            println!(
+                "{}: resolved path {} matches toxic {}",
+                obj.as_ref().display(),
+                lib.as_ref().display(),
+                regex
             );
             rv = false;
         }
@@ -184,10 +200,28 @@ impl CheckShlibs {
                 std::process::exit(1);
             }
         };
+        /*
+         * These environment variables are optional.
+         */
+        let toxic = match std::env::var("CHECK_SHLIBS_TOXIC") {
+            Ok(s) => {
+                let mut v = vec![];
+                let rgxs: Vec<_> = s.split_whitespace().collect();
+                for r in rgxs {
+                    let rgx = Regex::new(r).unwrap();
+                    v.push(rgx);
+                }
+                v
+            }
+            Err(_) => {
+                vec![]
+            }
+        };
 
-        let mut cache = CheckCache {
+        let mut state = CheckState {
             pkginfo,
             depends,
+            toxic,
             statlibs: HashMap::new(),
             pkglibs: HashMap::new(),
         };
@@ -199,7 +233,7 @@ impl CheckShlibs {
             let line = line?;
             let path = Path::new(&line);
             if let Ok(dso) = fs::read(path) {
-                self.check_dso(path, &dso, &mut cache);
+                self.check_dso(path, &dso, &mut state);
             }
         }
 
@@ -213,18 +247,43 @@ mod tests {
 
     #[test]
     fn test_shlib() {
+        let state = CheckState {
+            pkginfo: PathBuf::from("/notyet"),
+            depends: vec![],
+            toxic: vec![
+                Regex::new("libtoxic.so").unwrap(),
+                Regex::new("^/toxic").unwrap(),
+            ],
+            statlibs: HashMap::new(),
+            pkglibs: HashMap::new(),
+        };
+
         let obj = "/opt/pkg/bin/mutt";
         /*
          * Library paths must be absolute.
          */
-        assert_eq!(check_shlib(obj, "libfoo.so"), false);
+        assert_eq!(check_shlib(obj, "libfoo.so", &state), false);
+        /*
+         * Library paths must avoid toxic paths.
+         */
+        assert_eq!(check_shlib(obj, "/libtoxic.so", &state), false);
+        assert_eq!(check_shlib(obj, "/toxic/lib.so", &state), false);
         /*
          * Library paths must not start with WRKDIR
          */
         unsafe {
             std::env::set_var("WRKDIR", "/wrk");
         }
-        assert_eq!(check_shlib(obj, "/wrk/libfoo.so"), false);
-        assert_eq!(check_shlib(obj, "/libfoo.so"), true);
+        assert_eq!(check_shlib(obj, "/wrk/libfoo.so", &state), false);
+        /*
+         * These should be fine.
+         */
+        assert_eq!(check_shlib(obj, "/libfoo.so", &state), true);
+        assert_eq!(check_shlib(obj, "/libnottoxic.so", &state), true);
+
+        /*
+         * Uncomment this to verify stdout.
+         */
+        //assert!(false);
     }
 }
