@@ -54,36 +54,16 @@ impl CheckShlibs {
 
         /*
          * With ELF we have a list of library requirements, and a list of paths
-         * to search for them.  Try the paths from RUNPATH first, before
-         * falling back to the system paths if still unresolved.  Only check
-         * for package dependencies for RUNPATH paths.
+         * to search for them.  Search in a specific order, and only run checks
+         * where appropriate.
          */
         'nextlib: for lib in elf.libraries {
             /*
-             * RUNPATH entries.
-             */
-            for rpath in &runpath {
-                let mut libpath = PathBuf::from(rpath);
-                libpath.push(lib);
-                let exists = match state.statlibs.get(&libpath) {
-                    Some(e) => *e,
-                    None => {
-                        let e = libpath.exists();
-                        state.statlibs.insert(libpath.to_path_buf(), e);
-                        e
-                    }
-                };
-                if exists {
-                    check_shlib(path, &libpath, state);
-                    check_pkg(path, &libpath, state);
-                    continue 'nextlib;
-                }
-            }
-
-            /*
              * Look inside DESTDIR for any RUNPATH entries that haven't been
              * installed yet.  All we can do is check for existence, as they
-             * will clearly fall foul of e.g. WRKDIR checks.
+             * will clearly fall foul of e.g. WRKDIR checks.  This needs to
+             * come first, otherwise check_pkg will fail when a library that
+             * belongs to this package is found to be installed.
              */
             for rpath in &runpath {
                 let mut libpath = state.destdir.clone();
@@ -102,6 +82,27 @@ impl CheckShlibs {
                     }
                 };
                 if exists {
+                    continue 'nextlib;
+                }
+            }
+
+            /*
+             * RUNPATH entries.
+             */
+            for rpath in &runpath {
+                let mut libpath = PathBuf::from(rpath);
+                libpath.push(lib);
+                let exists = match state.statlibs.get(&libpath) {
+                    Some(e) => *e,
+                    None => {
+                        let e = libpath.exists();
+                        state.statlibs.insert(libpath.to_path_buf(), e);
+                        e
+                    }
+                };
+                if exists {
+                    check_shlib(path, &libpath, state);
+                    check_pkg(path, &libpath, state);
                     continue 'nextlib;
                 }
             }
