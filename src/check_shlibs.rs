@@ -35,13 +35,20 @@ pub struct CheckShlibs {}
  */
 pub struct CheckState {
     /*
-     * CROSS_DESTDIR is used to determine the prefix for system libraries, and
-     * will be empty for a native build.  DESTDIR is the temporary directory
-     * that files are installed to prior to packaging, and is where we look for
-     * libraries required by binaries we are about to install.
+     * CROSS_DESTDIR is used if packages are being cross-built and points to
+     * the location of both system libraries and package dependencies.
      */
     cross_destdir: Option<PathBuf>,
+    /*
+     * DESTDIR is the temporary directory that files are installed to prior to
+     * being packaged and installed.
+     */
     destdir: PathBuf,
+    /*
+     * List of system paths to look for libraries.  Not all file formats use
+     * this, for example MachO uses absolute paths.
+     */
+    system_paths: Vec<PathBuf>,
     /*
      * Where we built the package.  There should be no references to this path
      * at all in the final package.
@@ -231,7 +238,7 @@ impl CheckShlibs {
                 }
             }
             Err(_) => {
-                eprintln!("CROSS_DESTDIR is mandatory");
+                eprintln!("CROSS_DESTDIR is mandatory (can be empty)");
                 std::process::exit(1);
             }
         };
@@ -257,8 +264,8 @@ impl CheckShlibs {
                     std::process::exit(1);
                 }
             }
-            Err(e) => {
-                eprintln!("Could not read PKG_INFO_CMD: {e}");
+            Err(_) => {
+                eprintln!("PKG_INFO_CMD is mandatory");
                 std::process::exit(1);
             }
         };
@@ -279,8 +286,8 @@ impl CheckShlibs {
                 }
                 deps
             }
-            Err(e) => {
-                eprintln!("Could not read DEPENDS_FILE: {e}");
+            Err(_) => {
+                eprintln!("DEPENDS_FILE is mandatory");
                 std::process::exit(1);
             }
         };
@@ -288,6 +295,19 @@ impl CheckShlibs {
         /*
          * These environment variables are optional.
          */
+        let mut system_paths: Vec<PathBuf> = vec![];
+        if let Ok(paths) = std::env::var("PLATFORM_RPATH") {
+            let cross_prefix = match &cross_destdir {
+                Some(p) => p.clone(),
+                None => PathBuf::new(),
+            };
+            for p in paths.split(':').collect::<Vec<&str>>() {
+                let mut path = cross_prefix.clone();
+                path.push(p);
+                system_paths.push(path);
+            }
+        }
+
         let toxic = match std::env::var("CHECK_SHLIBS_TOXIC") {
             Ok(s) => {
                 let mut v = vec![];
@@ -319,6 +339,7 @@ impl CheckShlibs {
         let mut state = CheckState {
             destdir,
             cross_destdir,
+            system_paths,
             wrkdir,
             wrkref,
             pkg_info_cmd,

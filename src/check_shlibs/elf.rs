@@ -37,22 +37,6 @@ impl CheckShlibs {
         };
 
         /*
-         * System paths are prefixed with CROSS_DESTDIR, if set.
-         */
-        let mut syspath: Vec<PathBuf> = vec![];
-        if let Ok(paths) = env::var("PLATFORM_RPATH") {
-            let cross_prefix = match &state.cross_destdir {
-                Some(p) => p.clone(),
-                None => PathBuf::new(),
-            };
-            for p in paths.split(':').collect::<Vec<&str>>() {
-                let mut path = cross_prefix.clone();
-                path.push(p);
-                syspath.push(path);
-            }
-        }
-
-        /*
          * With ELF we have a list of library requirements, and a list of paths
          * to search for them.  Search in a specific order, and only run checks
          * where appropriate.
@@ -87,10 +71,20 @@ impl CheckShlibs {
             }
 
             /*
-             * RUNPATH entries.
+             * RUNPATH entries.  Add CROSS_DESTDIR prefix if set.
              */
             for rpath in &runpath {
-                let mut libpath = PathBuf::from(rpath);
+                let mut libpath = PathBuf::new();
+                match state.cross_destdir {
+                    Some(crossdir) => {
+                        libpath = PathBuf::from(crossdir);
+                        match rpath.strip_prefix("/") {
+                            Ok(p) => libpath.push(p),
+                            Err(_) => libpath.push(rpath),
+                        }
+                    }
+                    None => libpath = PathBuf::from(rpath),
+                };
                 libpath.push(lib);
                 let exists = match state.statlibs.get(&libpath) {
                     Some(e) => *e,
@@ -108,11 +102,10 @@ impl CheckShlibs {
             }
 
             /*
-             * PLATFORM_RPATH entries.  As per above these are prefixed with
-             * CROSS_DESTDIR if that is set, and we only perform shlib checks
-             * on them.
+             * PLATFORM_RPATH entries.  These have already been configured with
+             * a CROSS_DESTDIR prefix if that is set.
              */
-            for rpath in &syspath {
+            for rpath in &state.system_paths {
                 let mut libpath = PathBuf::from(rpath);
                 libpath.push(lib);
                 let exists = match state.statlibs.get(&libpath) {
