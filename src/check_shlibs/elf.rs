@@ -74,7 +74,7 @@ impl CheckShlibs {
              */
             for rpath in &runpath {
                 let mut libpath = PathBuf::new();
-                match state.cross_destdir {
+                match &state.cross_destdir {
                     Some(crossdir) => {
                         libpath = PathBuf::from(crossdir);
                         match rpath.strip_prefix("/") {
