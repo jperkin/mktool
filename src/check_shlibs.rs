@@ -34,7 +34,8 @@ pub struct CheckShlibs {}
  * Shared state for checks.
  */
 pub struct CheckState {
-    pkginfo: PathBuf,
+    pkg_info_cmd: PathBuf,
+    pkg_info_args: Vec<String>,
     /* _RRDEPENDS_FILE format: "deptype pkgmatch pkg" */
     depends: Vec<(String, String, String)>,
     /* List of toxic library path matches */
@@ -68,7 +69,8 @@ where
          * No cached entry, execute pkg_info to find out if it's a
          * pkgsrc library and store back to the cache accordingly.
          */
-        let cmd = Command::new(&state.pkginfo)
+        let cmd = Command::new(&state.pkg_info_cmd)
+            .args(&state.pkg_info_args)
             .arg("-Fe")
             .arg(lib.as_ref())
             .output()
@@ -171,8 +173,21 @@ impl CheckShlibs {
          * First verify that we have all the required environment variables
          * set, and perform initial configuration of them.
          */
-        let pkginfo = match std::env::var("PKG_INFO_CMD") {
-            Ok(s) => PathBuf::from(s),
+        let pkg_info_cmd: PathBuf;
+        let mut pkg_info_args = vec![];
+        match std::env::var("PKG_INFO_CMD") {
+            Ok(s) => {
+                let v: Vec<_> = s.split_whitespace().collect();
+                if let Some((first, args)) = v.split_first() {
+                    pkg_info_cmd = PathBuf::from(first);
+                    for arg in args {
+                        pkg_info_args.push(arg.to_string());
+                    }
+                } else {
+                    eprintln!("Malformed PKG_INFO_CMD {s}");
+                    std::process::exit(1);
+                }
+            }
             Err(e) => {
                 eprintln!("Could not read PKG_INFO_CMD: {e}");
                 std::process::exit(1);
@@ -219,7 +234,8 @@ impl CheckShlibs {
         };
 
         let mut state = CheckState {
-            pkginfo,
+            pkg_info_cmd,
+            pkg_info_args,
             depends,
             toxic,
             statlibs: HashMap::new(),
@@ -248,7 +264,8 @@ mod tests {
     #[test]
     fn test_shlib() {
         let state = CheckState {
-            pkginfo: PathBuf::from("/notyet"),
+            pkg_info_cmd: PathBuf::from("/notyet"),
+            pkg_info_args: vec![],
             depends: vec![],
             toxic: vec![
                 Regex::new("libtoxic.so").unwrap(),
