@@ -17,7 +17,6 @@
 use crate::check_shlibs::{check_pkg, check_shlib};
 use crate::check_shlibs::{CheckShlibs, CheckState};
 use goblin::elf::Elf;
-use std::env;
 use std::path::{Path, PathBuf};
 
 impl CheckShlibs {
@@ -79,8 +78,8 @@ impl CheckShlibs {
                     Some(crossdir) => {
                         libpath = PathBuf::from(crossdir);
                         match rpath.strip_prefix("/") {
-                            Ok(p) => libpath.push(p),
-                            Err(_) => libpath.push(rpath),
+                            Some(p) => libpath.push(p),
+                            None => libpath.push(rpath),
                         }
                     }
                     None => libpath = PathBuf::from(rpath),
