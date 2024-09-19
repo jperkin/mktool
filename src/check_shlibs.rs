@@ -48,6 +48,11 @@ pub struct CheckState {
      */
     wrkdir: PathBuf,
     /*
+     * Additional work directories specified by the user which if matched will
+     * result in failure.
+     */
+    wrkref: Vec<PathBuf>,
+    /*
      * Path to pkg_info and any arguments (usually "-K /path/to/pkgdb")
      */
     pkg_info_cmd: PathBuf,
@@ -159,6 +164,20 @@ where
     }
 
     /*
+     * Verify library does not match CHECK_WRKREF_EXTRA_DIRS.
+     */
+    for dir in &state.wrkref {
+        if lib.as_ref().starts_with(dir) {
+            println!(
+                "{}: rpath {} relative to CHECK_WRKREF_EXTRA_DIRS directory {}",
+                obj.as_ref().display(),
+                lib.as_ref().display(),
+                dir.display()
+            );
+            rv = false;
+        }
+    }
+    /*
      * Library paths must not match any that the user has marked as toxic, for
      * example if we want to explicitly avoid linking against certain system
      * libraries.
@@ -223,7 +242,6 @@ impl CheckShlibs {
                 std::process::exit(1);
             }
         };
-
         let pkg_info_cmd: PathBuf;
         let mut pkg_info_args = vec![];
         match std::env::var("PKG_INFO_CMD") {
@@ -284,11 +302,25 @@ impl CheckShlibs {
                 vec![]
             }
         };
+        let wrkref = match std::env::var("CHECK_WRKREF_EXTRA_DIRS") {
+            Ok(s) => {
+                let mut v = vec![];
+                let dirs: Vec<_> = s.split_whitespace().collect();
+                for d in dirs {
+                    v.push(PathBuf::from(d));
+                }
+                v
+            }
+            Err(_) => {
+                vec![]
+            }
+        };
 
         let mut state = CheckState {
             destdir,
             cross_destdir,
             wrkdir,
+            wrkref,
             pkg_info_cmd,
             pkg_info_args,
             depends,
@@ -321,7 +353,8 @@ mod tests {
         let state = CheckState {
             cross_destdir: None,
             destdir: PathBuf::from("/destdir"),
-            wrkdir: PathBuf::from("/wrk"),
+            wrkdir: PathBuf::from("/wrkdir"),
+            wrkref: vec![PathBuf::from("/wrkref")],
             pkg_info_cmd: PathBuf::from("/notyet"),
             pkg_info_args: vec![],
             depends: vec![],
@@ -344,9 +377,13 @@ mod tests {
         assert_eq!(check_shlib(obj, "/libtoxic.so", &state), false);
         assert_eq!(check_shlib(obj, "/toxic/lib.so", &state), false);
         /*
-         * Library paths must not start with WRKDIR
+         * Library paths must not start with WRKDIR.
          */
-        assert_eq!(check_shlib(obj, "/wrk/libfoo.so", &state), false);
+        assert_eq!(check_shlib(obj, "/wrkdir/libfoo.so", &state), false);
+        /*
+         * Library paths must not match CHECK_WRKREF_EXTRA_DIRS.
+         */
+        assert_eq!(check_shlib(obj, "/wrkref/libfoo.so", &state), false);
         /*
          * These should be fine.
          */
