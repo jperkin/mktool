@@ -43,6 +43,11 @@ pub struct CheckState {
     cross_destdir: Option<PathBuf>,
     destdir: PathBuf,
     /*
+     * Where we built the package.  There should be no references to this path
+     * at all in the final package.
+     */
+    wrkdir: PathBuf,
+    /*
      * Path to pkg_info and any arguments (usually "-K /path/to/pkgdb")
      */
     pkg_info_cmd: PathBuf,
@@ -144,15 +149,13 @@ where
     /*
      * Library paths must not start with WRKDIR.
      */
-    if let Ok(wrkdir) = std::env::var("WRKDIR") {
-        if lib.as_ref().starts_with(wrkdir) {
-            println!(
-                "{}: path relative to WRKDIR: {}",
-                obj.as_ref().display(),
-                lib.as_ref().display()
-            );
-            rv = false;
-        }
+    if lib.as_ref().starts_with(&state.wrkdir) {
+        println!(
+            "{}: path relative to WRKDIR: {}",
+            obj.as_ref().display(),
+            lib.as_ref().display()
+        );
+        rv = false;
     }
 
     /*
@@ -201,9 +204,22 @@ impl CheckShlibs {
             }
         };
         let cross_destdir = match std::env::var("CROSS_DESTDIR") {
-            Ok(s) => Some(PathBuf::from(s)),
+            Ok(s) => {
+                if s.is_empty() {
+                    None
+                } else {
+                    Some(PathBuf::from(s))
+                }
+            }
             Err(_) => {
                 eprintln!("CROSS_DESTDIR is mandatory");
+                std::process::exit(1);
+            }
+        };
+        let wrkdir = match std::env::var("WRKDIR") {
+            Ok(s) => PathBuf::from(s),
+            Err(_) => {
+                eprintln!("WRKDIR is mandatory");
                 std::process::exit(1);
             }
         };
@@ -250,6 +266,7 @@ impl CheckShlibs {
                 std::process::exit(1);
             }
         };
+
         /*
          * These environment variables are optional.
          */
@@ -271,6 +288,7 @@ impl CheckShlibs {
         let mut state = CheckState {
             destdir,
             cross_destdir,
+            wrkdir,
             pkg_info_cmd,
             pkg_info_args,
             depends,
@@ -303,6 +321,7 @@ mod tests {
         let state = CheckState {
             cross_destdir: None,
             destdir: PathBuf::from("/destdir"),
+            wrkdir: PathBuf::from("/wrk"),
             pkg_info_cmd: PathBuf::from("/notyet"),
             pkg_info_args: vec![],
             depends: vec![],
@@ -327,9 +346,6 @@ mod tests {
         /*
          * Library paths must not start with WRKDIR
          */
-        unsafe {
-            std::env::set_var("WRKDIR", "/wrk");
-        }
         assert_eq!(check_shlib(obj, "/wrk/libfoo.so", &state), false);
         /*
          * These should be fine.
