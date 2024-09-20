@@ -1,3 +1,13 @@
+## Version 1.2.0 (2024-09-20)
+
+ * check-shlibs: Add new "mktool check-shlibs" command.  Should behave the
+   same as the awk implementations, but with additional features, and much
+   faster runtime (0.6s vs 20.4s for x11/kde-workspace4).
+
+ * fetch: Avoid unnecessary re-fetching when running 'make makedistinfo'.
+
+ * Minor cleanups to checksum, distinfo, and fetch.
+
 ## Version 1.1.0 (2024-09-13)
 
  * digest: Add new "mktool digest" command.  Aims for compatibility with
