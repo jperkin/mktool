@@ -137,10 +137,10 @@ impl Cmd {
         'nextfile: for entry in
             WalkDir::new(".").into_iter().filter_map(|e| e.ok())
         {
-            let path = entry.path();
-            if !path.is_file() {
+            if !entry.file_type().is_file() {
                 continue;
             }
+            let path = entry.path();
             /*
              * Remove leading "./" from walkdir path entries as all
              * CHECK_PORTABILITY_SKIP matches are relative to WRKDIR.
