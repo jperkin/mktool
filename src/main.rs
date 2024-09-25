@@ -14,6 +14,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+mod check_portability;
 mod check_shlibs;
 mod checksum;
 mod ctfconvert;
@@ -40,6 +41,9 @@ pub struct Cli {
 #[derive(Debug, Subcommand)]
 #[command(rename_all = "lower")]
 enum Commands {
+    /// Perform portable shell checks
+    #[command(name = "check-portability")]
+    CheckPortability(check_portability::Cmd),
     /// Perform shared library checks
     #[command(name = "check-shlibs")]
     CheckShlibs(check_shlibs::CheckShlibs),
@@ -61,6 +65,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
     let rv = match &cli.command {
+        Commands::CheckPortability(cmd) => cmd.run()?,
         Commands::CheckShlibs(cmd) => cmd.run()?,
         Commands::CheckSum(cmd) => cmd.run()?,
         Commands::CTFConvert(cmd) => cmd.run()?,
