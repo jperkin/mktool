@@ -33,7 +33,8 @@ fn check_random(line: &str) -> bool {
     }
     for m in &matches {
         let start = m.0;
-        let next: usize = start + 7;
+        let next = start + "$RANDOM".len();
+
         /*
          * $RANDOM mixed with PID ($$) is commonly found in GNU configure
          * scripts, and because they are always executed using a compatible
@@ -46,9 +47,11 @@ fn check_random(line: &str) -> bool {
         if next + 2 < line.len() && line[next..next + 3] == *"-$$" {
             return false;
         }
+
         /*
          * Trailing A-Z_, i.e. a variable that starts "$RANDOM.." such as
-         * $RANDOMIZE is considered acceptable.
+         * $RANDOMIZE is considered acceptable, but only if there is no bare
+         * $RANDOM elsewhere on the line, so continue to other matches.
          */
         if next < line.len() {
             if let Some(ch) = line.chars().nth(next) {
@@ -57,6 +60,7 @@ fn check_random(line: &str) -> bool {
                 }
             }
         }
+
         /*
          * If we're still here then there's another $RANDOM on the line and
          * we didn't already exit early for the acceptable cases.  Set exit
@@ -120,6 +124,7 @@ package Makefile.
 impl Cmd {
     pub fn run(&self) -> Result<i32, Box<dyn std::error::Error>> {
         let mut rv = 0;
+
         /*
          * File globs to skip.  First add those skipped by check-portability.sh
          * and then any specified by the package/user.
@@ -134,6 +139,7 @@ impl Cmd {
                 }
             }
         }
+
         'nextfile: for entry in
             WalkDir::new(".").into_iter().filter_map(|e| e.ok())
         {
@@ -141,6 +147,7 @@ impl Cmd {
                 continue;
             }
             let path = entry.path();
+
             /*
              * Remove leading "./" from walkdir path entries as all
              * CHECK_PORTABILITY_SKIP matches are relative to WRKDIR.
@@ -151,20 +158,28 @@ impl Cmd {
                     continue 'nextfile;
                 }
             }
+
             /*
              * Verify that the first 1KB of the file is valid UTF-8, and
              * contains a valid shell hashbang, otherwise skip to avoid
-             * wasting time with binary files and non-shell files XXX UNLESS.
+             * wasting time with binary files and non-shell files.
+             *
+             * XXX If CHECK_PORTABILITY_EXPERIMENTAL is enabled then we
+             * should continue to check Makefiles (see shell version),
+             * however that is not currently supported and may never be,
+             * given I don't know anyone who enables it.
              */
             let mut file = fs::File::open(path)?;
             let mut buf = [0; 1024];
             let n = file.read(&mut buf)?;
+
             /*
              * Perform the simple and fast hashbang check first.
              */
             if !buf.starts_with(b"#!") {
                 continue 'nextfile;
             }
+
             /*
              * More complicated check for "/bin/sh" somewhere on first line
              * next.
@@ -175,6 +190,7 @@ impl Cmd {
             if !first.windows(binsh.len()).any(|win| win == binsh) {
                 continue 'nextfile;
             }
+
             if inspect(&buf[..n]) == ContentType::UTF_8 {
                 /*
                  * XXX: can we be more efficient and avoid re-reading the
@@ -233,13 +249,8 @@ mod tests {
 
     #[test]
     fn test_random() {
-        /*
-         * Unlike check-portability.awk we verify every match, not just the
-         * first.
-         */
         assert_eq!(check_random("$RANDOM"), true);
-        assert_eq!(check_random("$RANDOM $$-RANDOM"), true);
-        assert_eq!(check_random("$RANDOMIZE $RANDOM"), true);
+
         /*
          * Only exact matches for prefix/suffix "$$" are valid.
          */
@@ -258,17 +269,22 @@ mod tests {
         assert_eq!(check_random("$RANDOM $RANDOM-$$"), false);
 
         /*
-         * $RANDOM at the start of a variable name is fine.
+         * $RANDOM at the start of a variable name is fine, unless we also see
+         * a bare $RANDOM too (this differs from check-portability.awk which
+         * is first-match-wins).
          */
         assert_eq!(check_random("$RANDOMIZE"), false);
         assert_eq!(check_random("$RANDOM_ISH"), false);
+        assert_eq!(check_random("$RANDOMIZE $RANDOM"), true);
 
         /*
          * Commented matches are fine.  Unfortunately we strip commented
-         * lines prior to calling check_random() currently.
+         * lines prior to calling check_random() currently, so this should
+         * go into an integration test.
          */
         //assert_eq!(check_random("# $RANDOM"), false);
         //assert_eq!(check_random("   # $RANDOM"), false);
+
         /*
          * Misc non-matches.
          */
@@ -280,9 +296,16 @@ mod tests {
     #[test]
     fn test_eq() {
         assert_eq!(check_test_eq("if [ foo == bar ]; then"), true);
-        assert_eq!(check_test_eq("if [ foo = bar ]; then"), false);
 
         /* XXX: No support for whitespace in variable at present.  */
         assert_eq!(check_test_eq("if [ 'foo bar' == ojnk ]; then"), false);
+
+        /*
+         * Misc non-matches.
+         */
+        assert_eq!(check_test_eq(""), false);
+        assert_eq!(check_test_eq("foo == bar"), false);
+        assert_eq!(check_test_eq("if foo == bar"), false);
+        assert_eq!(check_test_eq("if [ foo = bar ]; then"), false);
     }
 }
