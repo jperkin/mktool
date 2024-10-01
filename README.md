@@ -3,6 +3,8 @@
 This is a collection of utilities that provide alternate implementations for
 parts of the [pkgsrc](https://github.com/NetBSD/pkgsrc/) mk infrastructure.
 
+## Benchmarks
+
 The main focus is on performance.  Here are some real-world numbers showing
 improvements seen, compared to the baseline shell/awk implementations:
 
@@ -15,6 +17,8 @@ improvements seen, compared to the baseline shell/awk implementations:
 |          distinfo |        3m 30s |          2s | **100x** |
 |             fetch |       47m 58s |          5s | **500x** |
 |           wrapper |        1m 41s |          9s |  **11x** |
+
+## User Improvements
 
 As well as superior performance, where possible mktool also aims to provide an
 improved user experience.  For example the `fetch` replacement features a
