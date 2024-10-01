@@ -8,7 +8,7 @@ improvements seen, compared to the baseline shell/awk implementations:
 
 |  Script / Target | Without mktool | With mktool |  Speedup |
 |------------------:|--------------:|------------:|---------:|
-| check-portability |           52s |          3s |  **16x** |
+| check-portability |           35s |          1s |  **30x** |
 |      check-shlibs |           20s |         <1s |  **30x** |
 |          checksum |           10s |          2s |   **5x** |
 |        ctfconvert |       40m 39s |      5m 13s |   **8x** |
