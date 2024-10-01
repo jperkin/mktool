@@ -140,12 +140,55 @@ impl Cmd {
             }
         }
 
+        /*
+         * Get list of patched files.
+         */
+        let mut patched = vec![];
+        if let Ok(patchdir) = std::env::var("PATCHDIR") {
+            for patch in
+                WalkDir::new(patchdir).into_iter().filter_map(|e| e.ok())
+            {
+                if !patch.file_type().is_file() {
+                    continue;
+                }
+                if !patch.file_name().to_string_lossy().starts_with("patch-") {
+                    continue;
+                }
+                let pfile = fs::File::open(patch.path())?;
+                let reader = BufReader::new(pfile);
+                for line in reader.lines() {
+                    let line = line?;
+                    if line.starts_with("+++") {
+                        let v: Vec<&str> =
+                            line.splitn(2, char::is_whitespace).collect();
+                        if v.len() == 2 {
+                            patched.push(v[1].to_string());
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+
         'nextfile: for entry in
             WalkDir::new(".").into_iter().filter_map(|e| e.ok())
         {
             if !entry.file_type().is_file() {
                 continue;
             }
+
+            /*
+             * If this filename ends ".in" and we already have a patch for the
+             * non-".in" filename then skip it, no need to patch both.
+             */
+            if let Some(p) =
+                entry.file_name().to_string_lossy().strip_suffix(".in")
+            {
+                if patched.contains(&p.into()) {
+                    continue 'nextfile;
+                }
+            }
+
             let path = entry.path();
 
             /*
