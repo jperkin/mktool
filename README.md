@@ -33,6 +33,7 @@ $ cargo install mktool
 and adding the following to `mk.conf`:
 
 ```make
+FETCH_USING=            mktool
 TOOLS_PLATFORM.mktool=  ${HOME}/.cargo/bin/mktool
 ```
 
@@ -60,7 +61,10 @@ These are the commands currently implemented:
 |             `fetch` | [mk/fetch/fetch](https://github.com/NetBSD/pkgsrc/blob/trunk/mk/fetch/fetch) |
 |          `symlinks` | [pkgtools/mktools](https://github.com/NetBSD/pkgsrc/blob/trunk/pkgtools/mktools/files/mk-buildlink-symlinks.c) |
 
-All of the replacements are activated upon setting `TOOLS_PLATFORM.mktool`.
+All of the replacements are activated upon setting `TOOLS_PLATFORM.mktool`,
+with the exception of `fetch` which also requires `FETCH_USING=mktool` in case
+the user has specific requirements for their fetch program.
+
 In addition, packages no longer have build dependencies on `pkgtools/digest`
 and `pkgtools/mktools` (unless specifically requested).
 
