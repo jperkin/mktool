@@ -126,18 +126,79 @@ impl Cmd {
         let mut rv = 0;
 
         /*
-         * File globs to skip.  First add those skipped by check-portability.sh
-         * and then any specified by the package/user.
+         * File globs to skip specified in CHECK_PORTABILITY_SKIP.
          */
-        let mut skip = vec![];
-        skip.push(glob::Pattern::new("*.orig").unwrap());
-        skip.push(glob::Pattern::new("*~").unwrap());
+        let mut skipglob = vec![];
         if let Ok(paths) = std::env::var("CHECK_PORTABILITY_SKIP") {
             for p in paths.split_whitespace().collect::<Vec<&str>>() {
                 if let Ok(g) = glob::Pattern::new(p) {
-                    skip.push(g);
+                    skipglob.push(g);
                 }
             }
+        }
+
+        /*
+         * List of file extensions to skip.  These are plain strings rather
+         * than adding to skipglob as it's faster.  Based on the lists in
+         * check-portability.sh but with some additions.
+         */
+        let mut skipext: Vec<String> = vec![];
+        skipext.push(".orig".to_string());
+        skipext.push("~".to_string());
+        for ext in [
+            "1",
+            "3",
+            "C",
+            "a",
+            "ac",
+            "c",
+            "cc",
+            "css",
+            "cxx",
+            "docbook",
+            "dtd",
+            "el",
+            "f",
+            "gif",
+            "gn",
+            "go",
+            "gz",
+            "h",
+            "hpp",
+            "htm",
+            "html",
+            "hxx",
+            "idl",
+            "inc",
+            "jpg",
+            "js",
+            "json",
+            "kicad_mod",
+            "m4",
+            "map",
+            "md",
+            "mo",
+            "ogg",
+            "page",
+            "php",
+            "pl",
+            "png",
+            "po",
+            "properties",
+            "py",
+            "py",
+            "rb",
+            "result",
+            "svg",
+            "test",
+            "tfm",
+            "ts",
+            "txt",
+            "vf",
+            "xml",
+            "xpm",
+        ] {
+            skipext.push(format!(".{ext}"));
         }
 
         /*
@@ -178,6 +239,16 @@ impl Cmd {
             }
 
             /*
+             * Skip extensions we aren't interested in.
+             */
+            let fname: &str = &entry.file_name().to_string_lossy();
+            for ext in &skipext {
+                if fname.ends_with(ext) {
+                    continue 'nextfile;
+                }
+            }
+
+            /*
              * If this filename ends ".in" and we already have a patch for the
              * non-".in" filename then skip it, no need to patch both.
              */
@@ -196,7 +267,7 @@ impl Cmd {
              * CHECK_PORTABILITY_SKIP matches are relative to WRKDIR.
              */
             let mpath = path.strip_prefix("./").unwrap();
-            for g in &skip {
+            for g in &skipglob {
                 if g.matches_path(mpath) {
                     continue 'nextfile;
                 }
