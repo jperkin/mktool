@@ -1,3 +1,9 @@
+## Version 1.3.0 (2024-10-01)
+
+ * check-portability: Add new "mktool check-portability" command.  Runs 30x
+   faster than the shell version in x11/qt5-qtwebengine on a MacBook Pro M1.
+   Does not yet support `CHECK_PORTABILITY_EXPERIMENTAL=yes`.
+
 ## Version 1.2.0 (2024-09-20)
 
  * check-shlibs: Add new "mktool check-shlibs" command.  Should behave the
