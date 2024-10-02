@@ -1,3 +1,8 @@
+## Version 1.3.1 (2024-10-02)
+
+ * check-shlibs: Fix issue running against pkgsrc trees that do not have the
+   implicit library dependency checks.
+
 ## Version 1.3.0 (2024-10-01)
 
  * check-portability: Add new "mktool check-portability" command.  Runs 30x
