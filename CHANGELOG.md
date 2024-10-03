@@ -1,3 +1,7 @@
+## Version 1.3.2 (2024-10-03)
+
+ * check-shlibs: Catch up with `USE_INDIRECT_DEPENDS` changes.
+
 ## Version 1.3.1 (2024-10-02)
 
  * check-shlibs: Fix issue running against pkgsrc trees that do not have the
