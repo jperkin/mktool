@@ -81,11 +81,6 @@ pub struct CheckState {
      */
     depends: Vec<(String, String, String)>,
     /*
-     * Whether _RRDEPENDS_FILE should be checked for implicit dependencies as
-     * well as explicit dependencies.  Currently requires an external patch.
-     */
-    implicit: bool,
-    /*
      * List of toxic library path regular expression matches.
      */
     toxic: Vec<Regex>,
@@ -173,26 +168,27 @@ where
     };
 
     /*
-     * If we depend on a pkgsrc library then it must be a full dependency.  If
-     * CHECK_SHLIBS_IMPLICIT is set (currently requires an external pkgsrc
-     * patch) then additional checks are performed, otherwise only direct
-     * dependencies are checked.
+     * If we depend on a pkgsrc library that appears in the depends file then
+     * it must be a full dependency.  If the package is not listed in depends
+     * then we don't currently have any good option other than to ignore it.
+     * For example, if the current package being built is already installed,
+     * then its installed libraries will be found, and of course a package
+     * will never be listed in its own depends.
      */
     let mut found = false;
     for dep in &state.depends {
         if dep.2 == pkgname {
             found = true;
-            if dep.0 == "full" || dep.0 == "implicit-full" {
+            if dep.0 == "full" || dep.0 == "indirect-full" {
                 return true;
             }
         }
     }
 
     /*
-     * If we didn't already exit early then this is a pkgsrc dependency that
-     * is not correctly registered.
+     * Only issue an error if the package was listed in the depends file.
      */
-    if found || state.implicit {
+    if found {
         println!(
             "{}: {}: {} is not a runtime dependency",
             obj.as_ref().display(),
@@ -359,10 +355,6 @@ impl CheckShlibs {
                 system_paths.push(path);
             }
         }
-        let implicit = match std::env::var("CHECK_SHLIBS_IMPLICIT") {
-            Ok(s) => s.to_lowercase() == "yes",
-            Err(_) => false,
-        };
         let toxic = match std::env::var("CHECK_SHLIBS_TOXIC") {
             Ok(s) => {
                 let mut v = vec![];
@@ -400,7 +392,6 @@ impl CheckShlibs {
             pkg_admin_cmd,
             pkg_admin_args,
             depends,
-            implicit,
             toxic,
             statlibs: HashMap::new(),
             pkgdb: HashMap::new(),
@@ -436,7 +427,6 @@ mod tests {
             pkg_admin_cmd: PathBuf::from("/notyet"),
             pkg_admin_args: vec![],
             depends: vec![],
-            implicit: false,
             toxic: vec![
                 Regex::new("libtoxic.so").unwrap(),
                 Regex::new("^/toxic").unwrap(),
