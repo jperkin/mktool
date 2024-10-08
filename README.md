@@ -43,10 +43,26 @@ TOOLS_PLATFORM.mktool=  ${HOME}/.cargo/bin/mktool
 
 However there is also a `pkgtools/mktool` package if you prefer to use that.
 
-You will also need to apply changes to pkgsrc.  The changes are in the
-[dev/mktool](https://github.com/NetBSD/pkgsrc/compare/trunk...TritonDataCenter:pkgsrc:dev/mktool)
+You will also need to apply changes to pkgsrc.  The easiest method is to just
+use the [TritonDataCenter/pkgsrc](https://github.com/TritonDataCenter/pkgsrc)
+fork as your primary repository, where the `trunk` branch includes the mktool
+patch, as well as a few other well-tested improvements to pkgsrc, and is synced
+with upstream [NetBSD/pkgsrc](https://github.com/NetBSD/pkgsrc) every hour.
+
+```shell
+$ git clone https://github.com/TritonDataCenter/pkgsrc
+
+$ cd pkgsrc
+< .. do usual pkgsrc things .. >
+
+# Fetch the latest updates every hour
+$ git pull
+```
+
+Alternatively the changes are in the
+[feature/mktool/trunk](https://github.com/NetBSD/pkgsrc/compare/trunk...TritonDataCenter:pkgsrc:feature/mktool/trunk)
 branch, and you can get them all as a single patch file
-[here](https://github.com/NetBSD/pkgsrc/compare/trunk...TritonDataCenter:pkgsrc:dev/mktool.patch).
+[here](https://github.com/NetBSD/pkgsrc/compare/trunk...TritonDataCenter:pkgsrc:feature/mktool/trunk.patch).
 
 See the FAQ below for why this is not yet committed.
 
@@ -70,23 +86,28 @@ with the exception of `fetch` which also requires `FETCH_USING=mktool` in case
 the user has specific requirements for their fetch program.
 
 In addition, packages no longer have build dependencies on `pkgtools/digest`
-and `pkgtools/mktools` (unless specifically requested).
+and `pkgtools/mktools` (unless specifically requested), which provides a
+reasonable boost to performance in bulk builds.
 
 ## FAQ
 
 ### Why Have The Patches Not Been Merged Into pkgsrc?
 
 I am uncomfortable committing changes that other developers have objections to.
+
 While the overwhelming response has been positive, there are still concerns
 from some that introducing mktool support will eventually lead to a mandatory
-requirement on Rust in the future.  I hope that my actions will eventually lead
-to these fears being allayed and the patches can be committed.
+requirement on Rust in the future. I have explicitly stated (and have spent
+over a decade proving by my actions) that this is not going to happen, and I
+hope that one day people will realise this and the patches can be committed.
 
 ### Will This Ever Be Mandatory?
 
 No.  pkgsrc supports over 20 operating systems, and on NetBSD alone 16
-different CPU architectures.  Rust will never support all of those systems, so
-the default will always be the portable shell and awk scripts.
+different CPU architectures.  I've spent over a decade as the primary advocate
+for portability in pkgsrc.  Rust will never support all of those systems, so
+the default will always be the portable shell and awk scripts.  I would be the
+first person to reject any move towards a non-portable pkgsrc.
 
 ### What Is The Minimum Support Rust Version?
 
