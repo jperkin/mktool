@@ -30,10 +30,14 @@ impl CheckShlibs {
             Ok(o) => o,
             Err(_) => return,
         };
-        let runpath: Vec<String> = match elf.runpaths.first() {
-            Some(p) => p.split(':').map(|s| s.to_string()).collect(),
-            None => vec![],
-        };
+
+        let mut rpaths: Vec<String> = vec![];
+        if let Some(p) = elf.runpaths.first() {
+            rpaths.extend(p.split(':').map(|s| s.to_string()));
+        }
+        if let Some(p) = elf.rpaths.first() {
+            rpaths.extend(p.split(':').map(|s| s.to_string()));
+        }
 
         /*
          * With ELF we have a list of library requirements, and a list of paths
@@ -48,7 +52,7 @@ impl CheckShlibs {
              * come first, otherwise check_pkg will fail when a library that
              * belongs to this package is found to be installed.
              */
-            for rpath in &runpath {
+            for rpath in &rpaths {
                 let mut libpath = state.destdir.clone();
                 let rp = PathBuf::from(rpath);
                 match rp.strip_prefix("/") {
@@ -72,7 +76,7 @@ impl CheckShlibs {
             /*
              * RUNPATH entries.  Add CROSS_DESTDIR prefix if set.
              */
-            for rpath in &runpath {
+            for rpath in &rpaths {
                 let mut libpath: PathBuf;
                 match &state.cross_destdir {
                     Some(crossdir) => {
