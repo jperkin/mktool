@@ -1,3 +1,7 @@
+## Version 1.3.3 (2024-10-09)
+
+ * check-shlibs: Support both RPATH and RUNPATH.
+
 ## Version 1.3.2 (2024-10-03)
 
  * check-shlibs: Catch up with `USE_INDIRECT_DEPENDS` changes.
