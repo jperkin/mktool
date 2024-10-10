@@ -1,3 +1,7 @@
+## Version 1.3.4 (2024-10-10)
+
+ * fetch: Handle case where a distfile has no site.
+
 ## Version 1.3.3 (2024-10-09)
 
  * check-shlibs: Support both RPATH and RUNPATH.
