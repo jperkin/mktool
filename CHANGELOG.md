@@ -1,3 +1,7 @@
+## Version 1.3.5 (2024-10-10)
+
+ * distinfo: Skip local and backup patch files.
+
 ## Version 1.3.4 (2024-10-10)
 
  * fetch: Handle case where a distfile has no site.
