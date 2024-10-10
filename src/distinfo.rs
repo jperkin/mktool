@@ -166,7 +166,7 @@ impl DistInfo {
 
         /*
          * Add patchfiles added as command line arguments.  We may be passed
-         * globs, so check the file actually exists first.
+         * globs, so check the file actually exists first and is a valid name.
          */
         let mut patchsums: Vec<Checksum> = vec![];
         for algorithm in &self.palgorithms {
@@ -176,6 +176,14 @@ impl DistInfo {
         for path in &self.patchfiles {
             if path.exists() {
                 if let Some(filename) = path.file_name() {
+                    let fname = filename.to_string_lossy();
+                    if fname.starts_with("patch-local")
+                        || fname.ends_with(".orig")
+                        || fname.ends_with(".rej")
+                        || fname.ends_with("~")
+                    {
+                        continue;
+                    }
                     let entry = Entry::new(
                         PathBuf::from(filename),
                         path,
