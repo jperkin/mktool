@@ -88,18 +88,26 @@ impl Fetch {
                     std::process::exit(1);
                 }
             };
-            // filepath distdir site [site ...]
+            // filepath distdir [site ...]
             for line in reader.lines() {
                 let line = line?;
                 let v: Vec<&str> = line.split_whitespace().collect();
-                if v.len() < 3 {
-                    eprintln!("Invalid input: {}", line);
+                if v.len() < 2 {
+                    eprintln!("fetch: Invalid input: {}", line);
                     return Ok(1);
                 }
                 let filepath = PathBuf::from(v[0]);
                 let distdir = PathBuf::from(v[1]);
-                let sites: Vec<String> =
-                    v[2..].iter().map(|s| s.to_string()).collect();
+                /*
+                 * In some cases no site will be specified, e.g. Oracle Java
+                 * files that the user needs to fetch manually.
+                 */
+                let sites = v
+                    .get(2..)
+                    .unwrap_or(&[])
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect::<Vec<String>>();
 
                 /*
                  * While technically we could support non-UTF-8 paths, and try
