@@ -43,28 +43,11 @@ TOOLS_PLATFORM.mktool=  ${HOME}/.cargo/bin/mktool
 
 However there is also a `pkgtools/mktool` package if you prefer to use that.
 
-You will also need to apply changes to pkgsrc.  The easiest method is to just
-use the [TritonDataCenter/pkgsrc](https://github.com/TritonDataCenter/pkgsrc)
-fork as your primary repository, where the `trunk` branch includes the mktool
-patch, as well as a few other well-tested improvements to pkgsrc, and is synced
-with upstream [NetBSD/pkgsrc](https://github.com/NetBSD/pkgsrc) every hour.
-
-```shell
-$ git clone https://github.com/TritonDataCenter/pkgsrc
-
-$ cd pkgsrc
-< .. do usual pkgsrc things .. >
-
-# Fetch the latest updates every hour
-$ git pull
-```
-
-Alternatively the changes are in the
-[feature/mktool/trunk](https://github.com/NetBSD/pkgsrc/compare/trunk...TritonDataCenter:pkgsrc:feature/mktool/trunk)
-branch, and you can get them all as a single patch file
-[here](https://github.com/NetBSD/pkgsrc/compare/trunk...TritonDataCenter:pkgsrc:feature/mktool/trunk.patch).
-
-See the FAQ below for why this is not yet committed.
+The necessary changes to pkgsrc were committed on 2024-10-11.  If you are
+running a pkgsrc older than this date and still want to use mktool then you
+will have to apply
+[this commit](https://github.com/NetBSD/pkgsrc/commit/a68ab6cb39f56b9e9b0025993d634455f416f267)
+yourself manually.
 
 ## Commands
 
@@ -90,16 +73,6 @@ and `pkgtools/mktools` (unless specifically requested), which provides a
 reasonable boost to performance in bulk builds.
 
 ## FAQ
-
-### Why Have The Patches Not Been Merged Into pkgsrc?
-
-I am uncomfortable committing changes that other developers have objections to.
-
-While the overwhelming response has been positive, there are still concerns
-from some that introducing mktool support will eventually lead to a mandatory
-requirement on Rust in the future. I have explicitly stated (and have spent
-over a decade proving by my actions) that this is not going to happen, and I
-hope that one day people will realise this and the patches can be committed.
 
 ### Will This Ever Be Mandatory?
 
