@@ -171,10 +171,7 @@ impl CheckSum {
          */
         let mut checkfiles: Vec<CheckResult> = checkfiles
             .into_iter()
-            .map(|e| CheckResult {
-                entry: e,
-                results: vec![],
-            })
+            .map(|e| CheckResult { entry: e, results: vec![] })
             .collect();
 
         /*

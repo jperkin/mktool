@@ -156,17 +156,15 @@ impl Fetch {
         )
         .unwrap()
         .progress_chars("=> ");
-        let progress = ProgressBar::new(0)
-            .with_prefix("Downloading")
-            .with_style(style);
+        let progress =
+            ProgressBar::new(0).with_prefix("Downloading").with_style(style);
 
         /*
          * Disable the Referer: header, this appears to cause problems with
          * redirect handling when downloading from SourceForge.
          */
-        let client = reqwest::blocking::Client::builder()
-            .referer(false)
-            .build()?;
+        let client =
+            reqwest::blocking::Client::builder().referer(false).build()?;
 
         files.par_iter_mut().for_each(|file| {
             if fetch_and_verify(&client, file, &distinfo, &progress).is_err() {

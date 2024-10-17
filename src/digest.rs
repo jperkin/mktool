@@ -83,10 +83,7 @@ impl DigestCmd {
          */
         let mut hashfiles: Vec<DigestResult> = files
             .iter()
-            .map(|f| DigestResult {
-                path: f.to_path_buf(),
-                hash: None,
-            })
+            .map(|f| DigestResult { path: f.to_path_buf(), hash: None })
             .collect();
 
         hashfiles.par_iter_mut().for_each(|file| {
