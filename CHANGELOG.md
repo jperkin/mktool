@@ -1,3 +1,8 @@
+## Version 1.3.6 (2024-10-20)
+
+* distinfo: Fix case where the last patch file is removed, previously it
+  would erroneously be retained when running makepatchsum.
+
 ## Version 1.3.5 (2024-10-10)
 
  * distinfo: Skip local and backup patch files.
