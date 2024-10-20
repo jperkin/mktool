@@ -293,7 +293,7 @@ impl DistInfo {
          * "makesum" operates, by just operating on distfiles and
          * keeping any patch entries.
          */
-        if di_new.patchfiles().is_empty() {
+        if self.patchfiles.is_empty() {
             for patchfile in di_cur.patchfiles() {
                 di_new.insert(patchfile.clone());
             }
