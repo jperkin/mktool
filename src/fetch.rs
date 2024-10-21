@@ -227,6 +227,9 @@ fn url_from_site(site: &str, filename: &str) -> String {
     url
 }
 
+/*
+ * Simple FTP handler.
+ */
 fn fetch_ftp(
     url: &Url,
     filename: &PathBuf,
@@ -311,6 +314,11 @@ fn fetch_and_verify(
     'nextsite: for site in &file.sites {
         let url = url_from_site(site, &file.filename);
         let parseurl = Url::parse(&url)?;
+        /*
+         * For FTP, hand off to our specific handler which will either return
+         * success or skip to the next site, otherwise everything else goes via
+         * reqwest which issues an error for unsupported protocols.
+         */
         if parseurl.scheme() == "ftp" {
             match fetch_ftp(&parseurl, &file_name, progress) {
                 Ok(len) => return Ok(len),
