@@ -1,3 +1,9 @@
+## Version 1.4.0 (2024-10-21)
+
+* fetch: Support FTP.
+
+* fetch: Switch reqwest to use the rustls backend instead of openssl.
+
 ## Version 1.3.6 (2024-10-20)
 
 * distinfo: Fix case where the last patch file is removed, previously it
