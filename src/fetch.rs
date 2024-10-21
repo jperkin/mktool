@@ -27,7 +27,7 @@ use std::fs::File;
 use std::io::{self, BufRead, BufReader};
 use std::path::PathBuf;
 use std::time::Instant;
-use suppaftp::FtpStream;
+use suppaftp::{FtpStream, types::FileType};
 use thiserror::Error;
 use url::Url;
 
@@ -239,6 +239,7 @@ fn fetch_ftp(
     let path = url.path();
     let mut ftp = FtpStream::connect((host, 21))?;
     ftp.login("anonymous", "anonymous")?;
+    ftp.transfer_type(FileType::Binary)?;
     let mut ftpfile = ftp.retr_as_stream(path)?;
     let file = File::create(filename)?;
     std::io::copy(&mut ftpfile, &mut progress.wrap_write(&file))?;
