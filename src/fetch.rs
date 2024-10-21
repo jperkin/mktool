@@ -27,7 +27,9 @@ use std::fs::File;
 use std::io::{self, BufRead, BufReader};
 use std::path::PathBuf;
 use std::time::Instant;
+use suppaftp::FtpStream;
 use thiserror::Error;
+use url::Url;
 
 #[derive(Args, Debug)]
 pub struct Fetch {
@@ -60,11 +62,15 @@ struct FetchFile {
 #[derive(Error, Debug)]
 pub enum FetchError {
     #[error(transparent)]
-    Reqwest(#[from] reqwest::Error),
+    Ftp(#[from] suppaftp::FtpError),
     #[error(transparent)]
     Io(#[from] io::Error),
     #[error("Unable to fetch file")]
     NotFound,
+    #[error(transparent)]
+    Reqwest(#[from] reqwest::Error),
+    #[error(transparent)]
+    Url(#[from] url::ParseError),
 }
 
 impl Fetch {
@@ -221,6 +227,23 @@ fn url_from_site(site: &str, filename: &str) -> String {
     url
 }
 
+fn fetch_ftp(
+    url: &Url,
+    filename: &PathBuf,
+    progress: &ProgressBar,
+) -> Result<u64, FetchError> {
+    let host = url.host_str().ok_or(FetchError::NotFound)?;
+    let path = url.path();
+    let mut ftp = FtpStream::connect((host, 21))?;
+    ftp.login("anonymous", "anonymous")?;
+    let mut ftpfile = ftp.retr_as_stream(path)?;
+    let file = File::create(filename)?;
+    std::io::copy(&mut ftpfile, &mut progress.wrap_write(&file))?;
+    ftp.finalize_retr_stream(ftpfile)?;
+    ftp.quit()?;
+    Ok(file.metadata()?.len())
+}
+
 /*
  * Attempt to download a file from a list of sites, and verify against the
  * listed checksums.
@@ -287,6 +310,18 @@ fn fetch_and_verify(
 
     'nextsite: for site in &file.sites {
         let url = url_from_site(site, &file.filename);
+        let parseurl = Url::parse(&url)?;
+        if parseurl.scheme() == "ftp" {
+            match fetch_ftp(&parseurl, &file_name, progress) {
+                Ok(len) => return Ok(len),
+                Err(e) => {
+                    progress.suspend(|| {
+                        eprintln!("Unable to fetch {}: {}", url, e);
+                    });
+                    continue 'nextsite;
+                }
+            }
+        }
         match client.get(&url).send() {
             Ok(mut body) => {
                 /*
