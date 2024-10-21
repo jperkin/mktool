@@ -1,3 +1,7 @@
+## Version 1.4.1 (2024-10-21)
+
+* fetch: Ensure FTP always transfers in BINARY mode.
+
 ## Version 1.4.0 (2024-10-21)
 
 * fetch: Support FTP.
