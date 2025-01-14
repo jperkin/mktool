@@ -1,3 +1,8 @@
+## Version 1.4.2 (2025-01-14)
+
+* Cargo: Bump pkgsrc-rs dependency to 0.4.1 to fix patches containing
+  non-UTF8 characters.
+
 ## Version 1.4.1 (2024-10-21)
 
 * fetch: Ensure FTP always transfers in BINARY mode.
