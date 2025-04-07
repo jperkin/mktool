@@ -138,7 +138,7 @@ where
                     PathBuf::from(OsString::from_vec((line[6..pos]).to_vec()));
 
                 let Some(pkg) =
-                    line.split(|sp| (*sp as char).is_whitespace()).last()
+                    line.split(|sp| (*sp as char).is_whitespace()).next_back()
                 else {
                     continue;
                 };
