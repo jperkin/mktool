@@ -99,7 +99,7 @@ impl Fetch {
                 let line = line?;
                 let v: Vec<&str> = line.split_whitespace().collect();
                 if v.len() < 2 {
-                    eprintln!("fetch: Invalid input: {}", line);
+                    eprintln!("fetch: Invalid input: {line}");
                     return Ok(1);
                 }
                 let filepath = PathBuf::from(v[0]);
@@ -325,7 +325,7 @@ fn fetch_and_verify(
                 Ok(len) => return Ok(len),
                 Err(e) => {
                     progress.suspend(|| {
-                        eprintln!("Unable to fetch {}: {}", url, e);
+                        eprintln!("Unable to fetch {url}: {e}");
                     });
                     continue 'nextsite;
                 }
@@ -380,15 +380,15 @@ fn fetch_and_verify(
                  */
                 let errmsg = if let Some(reqwest) = e.source() {
                     if let Some(hyper) = reqwest.source() {
-                        format!("Unable to fetch {}: {}", url, hyper)
+                        format!("Unable to fetch {url}: {hyper}")
                     } else {
-                        format!("Unable to fetch {}: {}", url, reqwest)
+                        format!("Unable to fetch {url}: {reqwest}")
                     }
                 } else {
-                    format!("Unable to fetch {}: {}", url, e)
+                    format!("Unable to fetch {url}: {e}")
                 };
                 progress.suspend(|| {
-                    eprintln!("{}", errmsg);
+                    eprintln!("{errmsg}");
                 });
             }
         }

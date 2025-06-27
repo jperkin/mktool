@@ -96,7 +96,7 @@ not be used in shell programs that are meant to be portable across a
 large number of POSIX-like systems.
 ===========================================================================
     "#;
-    println!("{}", msg);
+    println!("{msg}");
 }
 
 fn print_test_eq_error() {
@@ -118,7 +118,7 @@ needed, add its name to the CHECK_PORTABILITY_SKIP variable in the
 package Makefile.
 ===========================================================================
     "#;
-    println!("{}", msg);
+    println!("{msg}");
 }
 
 impl Cmd {

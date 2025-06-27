@@ -178,7 +178,7 @@ impl CTFConvert {
              */
             let stderr = String::from_utf8_lossy(&cmd.stderr);
             for line in stderr.lines() {
-                eprintln!("{}: {}", filename, line);
+                eprintln!("{filename}: {line}");
             }
 
             if outfile.exists() {
