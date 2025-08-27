@@ -33,7 +33,7 @@ fn test_checksum_invalid_args() {
     let cmd = Command::new(MKTOOL)
         .arg("checksum")
         .output()
-        .expect(format!("unable to exec {}", MKTOOL).as_str());
+        .unwrap_or_else(|_| panic!("unable to exec {}", MKTOOL));
     assert_eq!(cmd.status.code(), Some(2));
 }
 
@@ -48,7 +48,7 @@ fn test_checksum_no_input() {
         .arg("checksum")
         .arg(distinfo)
         .output()
-        .expect(format!("unable to exec {}", MKTOOL).as_str());
+        .unwrap_or_else(|_| panic!("unable to exec {}", MKTOOL));
     assert_eq!(cmd.status.code(), Some(0));
     assert_eq!(cmd.stdout, "".as_bytes());
     assert_eq!(cmd.stderr, "".as_bytes());
@@ -66,7 +66,7 @@ fn test_checksum_bad_distinfo() {
         .arg("checksum")
         .arg(distinfo)
         .output()
-        .expect(format!("unable to exec {}", MKTOOL).as_str());
+        .unwrap_or_else(|_| panic!("unable to exec {}", MKTOOL));
     assert_eq!(cmd.status.code(), Some(3));
     assert_eq!(cmd.stdout, "".as_bytes());
     assert_eq!(cmd.stderr, output.as_bytes());
@@ -85,7 +85,7 @@ fn test_checksum_bad_distfile() {
         .arg(&distinfo)
         .arg("foo")
         .output()
-        .expect(format!("unable to exec {}", MKTOOL).as_str());
+        .unwrap_or_else(|_| panic!("unable to exec {}", MKTOOL));
     assert_eq!(cmd.status.code(), Some(2));
     assert_eq!(cmd.stdout, "".as_bytes());
     assert_eq!(
@@ -112,7 +112,7 @@ fn test_checksum_valid_distfile() {
         .arg("digest1.txt")
         .current_dir("tests/data")
         .output()
-        .expect(format!("unable to exec {}", MKTOOL).as_str());
+        .unwrap_or_else(|_| panic!("unable to exec {}", MKTOOL));
     assert_eq!(cmd.status.code(), Some(0));
     assert_eq!(cmd.stdout, output.as_bytes());
     assert_eq!(cmd.stderr, "".as_bytes());
@@ -127,7 +127,7 @@ fn test_checksum_valid_distfile() {
         .arg("../data/digest1.txt")
         .current_dir("tests/data")
         .output()
-        .expect(format!("unable to exec {}", MKTOOL).as_str());
+        .unwrap_or_else(|_| panic!("unable to exec {}", MKTOOL));
     assert_eq!(cmd.status.code(), Some(0));
     assert_eq!(cmd.stdout, output.as_bytes());
     assert_eq!(cmd.stderr, "".as_bytes());
@@ -143,7 +143,7 @@ fn test_checksum_valid_distfile() {
         .arg("digest1.txt")
         .current_dir("tests/data")
         .output()
-        .expect(format!("unable to exec {}", MKTOOL).as_str());
+        .unwrap_or_else(|_| panic!("unable to exec {}", MKTOOL));
     assert_eq!(cmd.status.code(), Some(0));
     assert_eq!(cmd.stdout, output.as_bytes());
     assert_eq!(cmd.stderr, "".as_bytes());
@@ -157,7 +157,7 @@ fn test_checksum_valid_distfile() {
         .arg("digest2.txt")
         .current_dir("tests/data")
         .output()
-        .expect(format!("unable to exec {}", MKTOOL).as_str());
+        .unwrap_or_else(|_| panic!("unable to exec {}", MKTOOL));
     assert_eq!(cmd.status.code(), Some(0));
     assert_eq!(cmd.stdout, output.as_bytes());
     assert_eq!(cmd.stderr, "".as_bytes());
@@ -182,7 +182,7 @@ fn test_checksum_valid_distfile() {
         .arg("digest1.txt")
         .current_dir("tests/data")
         .output()
-        .expect(format!("unable to exec {}", MKTOOL).as_str());
+        .unwrap_or_else(|_| panic!("unable to exec {}", MKTOOL));
     assert_eq!(cmd.status.code(), Some(2));
     assert_eq!(cmd.stdout, output.as_bytes());
     assert_eq!(cmd.stderr, outerr.as_bytes());
@@ -213,7 +213,7 @@ fn test_checksum_input_file() {
         .arg("digest1.txt")
         .current_dir("tests/data")
         .output()
-        .expect(format!("unable to spawn {}", MKTOOL).as_str());
+        .unwrap_or_else(|_| panic!("unable to spawn {}", MKTOOL));
     fs::remove_file(&tmpfile).expect("unable to remove temp file");
     assert_eq!(cmd.status.code(), Some(0));
     assert_eq!(cmd.stdout, output.as_bytes());
@@ -241,7 +241,7 @@ fn test_checksum_input_stdin() {
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()
-        .expect(format!("unable to spawn {}", MKTOOL).as_str());
+        .unwrap_or_else(|_| panic!("unable to spawn {}", MKTOOL));
     let mut stdin = cmd.stdin.take().expect("failed to open stdin");
     std::thread::spawn(move || {
         stdin
@@ -274,7 +274,7 @@ fn test_checksum_strip_mode() {
         .arg("digest1.txt.suffix")
         .current_dir("tests/data")
         .output()
-        .expect(format!("unable to exec {}", MKTOOL).as_str());
+        .unwrap_or_else(|_| panic!("unable to exec {}", MKTOOL));
     assert_eq!(cmd.status.code(), Some(0));
     assert_eq!(cmd.stdout, output.as_bytes());
     assert_eq!(cmd.stderr, "".as_bytes());
@@ -289,7 +289,7 @@ fn test_checksum_strip_mode() {
         .arg("digest1.txt.suffix")
         .current_dir("tests/data")
         .output()
-        .expect(format!("unable to exec {}", MKTOOL).as_str());
+        .unwrap_or_else(|_| panic!("unable to exec {}", MKTOOL));
     assert_eq!(cmd.status.code(), Some(2));
     assert_eq!(cmd.stdout, "".as_bytes());
     assert_eq!(cmd.stderr, output.as_bytes());
@@ -316,7 +316,7 @@ fn test_checksum_no_checksum() {
         .arg("nonexistent.txt")
         .current_dir("tests/data")
         .output()
-        .expect(format!("unable to exec {}", MKTOOL).as_str());
+        .unwrap_or_else(|_| panic!("unable to exec {}", MKTOOL));
     assert_eq!(cmd.status.code(), Some(2));
     assert_eq!(cmd.stdout, "".as_bytes());
     assert_eq!(cmd.stderr, output.as_bytes());
@@ -337,7 +337,7 @@ fn test_checksum_patch() {
         .arg("patch-Makefile")
         .current_dir("tests/data")
         .output()
-        .expect(format!("unable to exec {}", MKTOOL).as_str());
+        .unwrap_or_else(|_| panic!("unable to exec {}", MKTOOL));
     assert_eq!(cmd.status.code(), Some(0));
     assert_eq!(cmd.stdout, output.as_bytes());
     assert_eq!(cmd.stderr, "".as_bytes());
@@ -359,7 +359,7 @@ fn test_checksum_patch_path() {
         .arg("../data/patch-Makefile")
         .current_dir("tests/data")
         .output()
-        .expect(format!("unable to exec {}", MKTOOL).as_str());
+        .unwrap_or_else(|_| panic!("unable to exec {}", MKTOOL));
     assert_eq!(cmd.status.code(), Some(0));
     assert_eq!(cmd.stdout, output.as_bytes());
     assert_eq!(cmd.stderr, "".as_bytes());
@@ -382,7 +382,7 @@ fn test_checksum_mismatch() {
         .arg("digest1.txt")
         .current_dir("tests/data")
         .output()
-        .expect(format!("unable to exec {}", MKTOOL).as_str());
+        .unwrap_or_else(|_| panic!("unable to exec {}", MKTOOL));
     assert_eq!(cmd.status.code(), Some(1));
     assert_eq!(cmd.stdout, "".as_bytes());
     assert_eq!(cmd.stderr, output.as_bytes());
@@ -396,7 +396,7 @@ fn test_checksum_mismatch() {
         .arg("digest1.txt")
         .current_dir("tests/data")
         .output()
-        .expect(format!("unable to exec {}", MKTOOL).as_str());
+        .unwrap_or_else(|_| panic!("unable to exec {}", MKTOOL));
     assert_eq!(cmd.status.code(), Some(1));
     assert_eq!(cmd.stdout, "".as_bytes());
     assert_eq!(cmd.stderr, output.as_bytes());
@@ -409,7 +409,7 @@ fn test_checksum_mismatch() {
         .arg("patch-Makefile")
         .current_dir("tests/data")
         .output()
-        .expect(format!("unable to exec {}", MKTOOL).as_str());
+        .unwrap_or_else(|_| panic!("unable to exec {}", MKTOOL));
     assert_eq!(cmd.status.code(), Some(1));
     assert_eq!(cmd.stdout, "".as_bytes());
     assert_eq!(cmd.stderr, output.as_bytes());

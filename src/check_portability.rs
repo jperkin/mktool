@@ -363,33 +363,33 @@ mod tests {
 
     #[test]
     fn test_random() {
-        assert_eq!(check_random("$RANDOM"), true);
+        assert!(check_random("$RANDOM"));
 
         /*
          * Only exact matches for prefix/suffix "$$" are valid.
          */
-        assert_eq!(check_random("-$RANDOM"), true);
-        assert_eq!(check_random("$-$RANDOM"), true);
-        assert_eq!(check_random("$RANDOM-"), true);
-        assert_eq!(check_random("$RANDOM-$"), true);
-        assert_eq!(check_random("$$-$RANDOM"), false);
-        assert_eq!(check_random("$RANDOM-$$"), false);
+        assert!(check_random("-$RANDOM"));
+        assert!(check_random("$-$RANDOM"));
+        assert!(check_random("$RANDOM-"));
+        assert!(check_random("$RANDOM-$"));
+        assert!(!check_random("$$-$RANDOM"));
+        assert!(!check_random("$RANDOM-$$"));
 
         /*
          * If we see GNU-style $$-$RANDOM anywhere then all other matches are
          * effectively ignored.
          */
-        assert_eq!(check_random("$RANDOM-$$ $RANDOM"), false);
-        assert_eq!(check_random("$RANDOM $RANDOM-$$"), false);
+        assert!(!check_random("$RANDOM-$$ $RANDOM"));
+        assert!(!check_random("$RANDOM $RANDOM-$$"));
 
         /*
          * $RANDOM at the start of a variable name is fine, unless we also see
          * a bare $RANDOM too (this differs from check-portability.awk which
          * is first-match-wins).
          */
-        assert_eq!(check_random("$RANDOMIZE"), false);
-        assert_eq!(check_random("$RANDOM_ISH"), false);
-        assert_eq!(check_random("$RANDOMIZE $RANDOM"), true);
+        assert!(!check_random("$RANDOMIZE"));
+        assert!(!check_random("$RANDOM_ISH"));
+        assert!(check_random("$RANDOMIZE $RANDOM"));
 
         /*
          * Commented matches are fine.  Unfortunately we strip commented
@@ -402,24 +402,24 @@ mod tests {
         /*
          * Misc non-matches.
          */
-        assert_eq!(check_random(""), false);
-        assert_eq!(check_random("RANDOM"), false);
-        assert_eq!(check_random("$ RANDOM"), false);
+        assert!(!check_random(""));
+        assert!(!check_random("RANDOM"));
+        assert!(!check_random("$ RANDOM"));
     }
 
     #[test]
     fn test_eq() {
-        assert_eq!(check_test_eq("if [ foo == bar ]; then"), true);
+        assert!(check_test_eq("if [ foo == bar ]; then"));
 
         /* XXX: No support for whitespace in variable at present.  */
-        assert_eq!(check_test_eq("if [ 'foo bar' == ojnk ]; then"), false);
+        assert!(!check_test_eq("if [ 'foo bar' == ojnk ]; then"));
 
         /*
          * Misc non-matches.
          */
-        assert_eq!(check_test_eq(""), false);
-        assert_eq!(check_test_eq("foo == bar"), false);
-        assert_eq!(check_test_eq("if foo == bar"), false);
-        assert_eq!(check_test_eq("if [ foo = bar ]; then"), false);
+        assert!(!check_test_eq(""));
+        assert!(!check_test_eq("foo == bar"));
+        assert!(!check_test_eq("if foo == bar"));
+        assert!(!check_test_eq("if [ foo = bar ]; then"));
     }
 }

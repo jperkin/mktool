@@ -439,25 +439,25 @@ mod tests {
         /*
          * Library paths must be absolute.
          */
-        assert_eq!(check_shlib(obj, "libfoo.so", &state), false);
+        assert!(!check_shlib(obj, "libfoo.so", &state));
         /*
          * Library paths must avoid toxic paths.
          */
-        assert_eq!(check_shlib(obj, "/libtoxic.so", &state), false);
-        assert_eq!(check_shlib(obj, "/toxic/lib.so", &state), false);
+        assert!(!check_shlib(obj, "/libtoxic.so", &state));
+        assert!(!check_shlib(obj, "/toxic/lib.so", &state));
         /*
          * Library paths must not start with WRKDIR.
          */
-        assert_eq!(check_shlib(obj, "/wrkdir/libfoo.so", &state), false);
+        assert!(!check_shlib(obj, "/wrkdir/libfoo.so", &state));
         /*
          * Library paths must not match CHECK_WRKREF_EXTRA_DIRS.
          */
-        assert_eq!(check_shlib(obj, "/wrkref/libfoo.so", &state), false);
+        assert!(!check_shlib(obj, "/wrkref/libfoo.so", &state));
         /*
          * These should be fine.
          */
-        assert_eq!(check_shlib(obj, "/libfoo.so", &state), true);
-        assert_eq!(check_shlib(obj, "/libnottoxic.so", &state), true);
+        assert!(check_shlib(obj, "/libfoo.so", &state));
+        assert!(check_shlib(obj, "/libnottoxic.so", &state));
 
         /*
          * Uncomment this to verify stdout.

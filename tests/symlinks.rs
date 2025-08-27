@@ -34,7 +34,7 @@ fn test_symlink_simple() {
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()
-        .expect(format!("unable to spawn {}", MKTOOL).as_str());
+        .unwrap_or_else(|_| panic!("unable to spawn {}", MKTOOL));
     let mut stdin = cmd.stdin.take().expect("failed to open stdin");
     std::thread::spawn(move || {
         stdin
@@ -46,9 +46,9 @@ fn test_symlink_simple() {
     assert_eq!(out.status.code(), Some(0));
     assert_eq!(out.stdout, "".as_bytes());
     assert_eq!(out.stderr, "".as_bytes());
-    assert_eq!(tmpdir.clone().join("dst1").is_symlink(), true);
-    assert_eq!(tmpdir.clone().join("dst1").exists(), false);
-    assert_eq!(tmpdir.clone().join("src1").exists(), false);
+    assert!(tmpdir.clone().join("dst1").is_symlink());
+    assert!(!tmpdir.clone().join("dst1").exists());
+    assert!(!tmpdir.clone().join("src1").exists());
 }
 
 /*
@@ -63,7 +63,7 @@ fn test_symlink_overwrite() {
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()
-        .expect(format!("unable to spawn {}", MKTOOL).as_str());
+        .unwrap_or_else(|_| panic!("unable to spawn {}", MKTOOL));
     let mut stdin = cmd.stdin.take().expect("failed to open stdin");
     std::thread::spawn(move || {
         stdin
@@ -75,10 +75,10 @@ fn test_symlink_overwrite() {
     assert_eq!(out.status.code(), Some(0));
     assert_eq!(out.stdout, "".as_bytes());
     assert_eq!(out.stderr, "".as_bytes());
-    assert_eq!(tmpdir.clone().join("dst2").is_symlink(), true);
-    assert_eq!(tmpdir.clone().join("dst2").exists(), false);
-    assert_eq!(tmpdir.clone().join("src2").exists(), false);
-    assert_eq!(tmpdir.clone().join("src2a").exists(), false);
+    assert!(tmpdir.clone().join("dst2").is_symlink());
+    assert!(!tmpdir.clone().join("dst2").exists());
+    assert!(!tmpdir.clone().join("src2").exists());
+    assert!(!tmpdir.clone().join("src2a").exists());
 }
 
 /*
@@ -93,7 +93,7 @@ fn test_symlink_subdir() {
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()
-        .expect(format!("unable to spawn {}", MKTOOL).as_str());
+        .unwrap_or_else(|_| panic!("unable to spawn {}", MKTOOL));
     let mut stdin = cmd.stdin.take().expect("failed to open stdin");
     std::thread::spawn(move || {
         // While here test that whitespace is trimmed.
@@ -106,12 +106,12 @@ fn test_symlink_subdir() {
     assert_eq!(out.status.code(), Some(0));
     assert_eq!(out.stdout, "".as_bytes());
     assert_eq!(out.stderr, "".as_bytes());
-    assert_eq!(tmpdir.clone().join("dst3").is_dir(), true);
-    assert_eq!(tmpdir.clone().join("dst3/a").is_dir(), true);
-    assert_eq!(tmpdir.clone().join("dst3/a/b").is_dir(), true);
-    assert_eq!(tmpdir.clone().join("dst3/a/b/c").is_dir(), true);
-    assert_eq!(tmpdir.clone().join("dst3/a/b/c/f").is_symlink(), true);
-    assert_eq!(tmpdir.clone().join("dst3/a/b/c/f").exists(), false);
+    assert!(tmpdir.clone().join("dst3").is_dir());
+    assert!(tmpdir.clone().join("dst3/a").is_dir());
+    assert!(tmpdir.clone().join("dst3/a/b").is_dir());
+    assert!(tmpdir.clone().join("dst3/a/b/c").is_dir());
+    assert!(tmpdir.clone().join("dst3/a/b/c/f").is_symlink());
+    assert!(!tmpdir.clone().join("dst3/a/b/c/f").exists());
 }
 
 /*
@@ -133,7 +133,7 @@ fn test_symlink_invalid() {
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()
-        .expect(format!("unable to spawn {}", MKTOOL).as_str());
+        .unwrap_or_else(|_| panic!("unable to spawn {}", MKTOOL));
     let mut stdin = cmd.stdin.take().expect("failed to open stdin");
     std::thread::spawn(move || {
         stdin

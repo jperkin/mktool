@@ -32,7 +32,7 @@ fn test_distinfo_no_args() {
     let cmd = Command::new(MKTOOL)
         .arg("distinfo")
         .output()
-        .expect(format!("unable to spawn {}", MKTOOL).as_str());
+        .unwrap_or_else(|_| panic!("unable to spawn {}", MKTOOL));
     assert_eq!(cmd.status.code(), Some(1));
     assert_eq!(cmd.stdout, output.as_bytes());
     assert_eq!(cmd.stderr, "".as_bytes());
@@ -52,7 +52,7 @@ fn test_distinfo_just_distinfo() {
         .arg("distinfo")
         .current_dir("tests/data")
         .output()
-        .expect(format!("unable to spawn {}", MKTOOL).as_str());
+        .unwrap_or_else(|_| panic!("unable to spawn {}", MKTOOL));
     assert_eq!(cmd.status.code(), Some(1));
     assert_eq!(cmd.stdout, "".as_bytes());
     assert_eq!(cmd.stderr, "".as_bytes());
@@ -68,7 +68,7 @@ fn test_distinfo_invalid_distdir() {
         .arg("-d")
         .arg("/nonexistent")
         .output()
-        .expect(format!("unable to spawn {}", MKTOOL).as_str());
+        .unwrap_or_else(|_| panic!("unable to spawn {}", MKTOOL));
     assert_eq!(cmd.status.code(), Some(128));
     assert_eq!(cmd.stdout, "".as_bytes());
     assert!(cmd.stderr.starts_with(b"ERROR: Supplied DISTDIR"));
@@ -81,7 +81,7 @@ fn test_distinfo_invalid_distinfo() {
         .arg("-f")
         .arg("/nonexistent")
         .output()
-        .expect(format!("unable to spawn {}", MKTOOL).as_str());
+        .unwrap_or_else(|_| panic!("unable to spawn {}", MKTOOL));
     assert_eq!(cmd.status.code(), Some(128));
     assert_eq!(cmd.stdout, "".as_bytes());
     assert!(cmd.stderr.starts_with(b"ERROR: Could not open distinfo"));
@@ -110,7 +110,7 @@ fn test_distinfo_single_file_no_checksum() {
         .arg("digest1.txt")
         .current_dir("tests/data")
         .output()
-        .expect(format!("unable to spawn {}", MKTOOL).as_str());
+        .unwrap_or_else(|_| panic!("unable to spawn {}", MKTOOL));
     assert_eq!(cmd.status.code(), Some(1));
     assert_eq!(cmd.stdout, output.as_bytes());
     assert_eq!(cmd.stderr, "".as_bytes());
@@ -130,7 +130,7 @@ fn test_distinfo_single_file_no_checksum() {
         .arg("does-not-exist.txt")
         .current_dir("tests/data")
         .output()
-        .expect(format!("unable to spawn {}", MKTOOL).as_str());
+        .unwrap_or_else(|_| panic!("unable to spawn {}", MKTOOL));
     assert_eq!(cmd.status.code(), Some(1));
     assert_eq!(cmd.stdout, output.as_bytes());
     assert_eq!(cmd.stderr, "".as_bytes());
@@ -157,7 +157,7 @@ fn test_distinfo_single_patch_no_distinfo() {
         .arg("patch-Makefile")
         .current_dir("tests/data")
         .output()
-        .expect(format!("unable to spawn {}", MKTOOL).as_str());
+        .unwrap_or_else(|_| panic!("unable to spawn {}", MKTOOL));
     assert_eq!(cmd.status.code(), Some(1));
     assert_eq!(cmd.stdout, output.as_bytes());
     assert_eq!(cmd.stderr, "".as_bytes());
@@ -177,7 +177,7 @@ fn test_distinfo_single_patch_with_distinfo() {
         .arg("patch-Makefile")
         .current_dir("tests/data")
         .output()
-        .expect(format!("unable to spawn {}", MKTOOL).as_str());
+        .unwrap_or_else(|_| panic!("unable to spawn {}", MKTOOL));
     assert_eq!(cmd.status.code(), Some(0));
     assert_eq!(cmd.stdout, diout);
     assert_eq!(cmd.stderr, "".as_bytes());
@@ -202,7 +202,7 @@ fn test_distinfo_patchmode_no_patches() {
         .arg("patch-non-existent")
         .current_dir("tests/data")
         .output()
-        .expect(format!("unable to spawn {}", MKTOOL).as_str());
+        .unwrap_or_else(|_| panic!("unable to spawn {}", MKTOOL));
     assert_eq!(cmd.status.code(), Some(0));
     assert_eq!(cmd.stdout, diout);
     assert_eq!(cmd.stderr, "".as_bytes());
@@ -216,7 +216,8 @@ fn test_distinfo_patchmode_no_patches() {
 fn test_distinfo_distfiles_no_distinfo() {
     let mut distinfo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     distinfo.push("tests/data/distinfo");
-    let output = format!("{}\n\n{}\n{}\n{}\n{}\n{}\n{}\n",
+    let output = format!(
+        "{}\n\n{}\n{}\n{}\n{}\n{}\n{}\n",
         "$NetBSD$",
         "BLAKE2s (digest1.txt) = 54020b13a41ebeebdbec3910e60c13b024568e597aed3c3412e611f703590311",
         "SHA512 (digest1.txt) = ac6cd4956428e83cf6c13742d4d96af2608681d09def86fc8aaca0689af4d2fb09317692daf26c0301c79652c6f8fc3b2764a0b96e8b1bc897413ba46e520139",
@@ -238,7 +239,7 @@ fn test_distinfo_distfiles_no_distinfo() {
         .arg("digest2.txt")
         .current_dir("tests/data")
         .output()
-        .expect(format!("unable to spawn {}", MKTOOL).as_str());
+        .unwrap_or_else(|_| panic!("unable to spawn {}", MKTOOL));
     assert_eq!(cmd.status.code(), Some(1));
     assert_eq!(cmd.stdout, output.as_bytes());
     assert_eq!(cmd.stderr, "".as_bytes());
@@ -264,7 +265,7 @@ fn test_distinfo_distfiles_with_distinfo() {
         .arg("distinfo")
         .current_dir("tests/data")
         .output()
-        .expect(format!("unable to spawn {}", MKTOOL).as_str());
+        .unwrap_or_else(|_| panic!("unable to spawn {}", MKTOOL));
     assert_eq!(cmd.status.code(), Some(0));
     assert_eq!(cmd.stdout, diout);
     assert_eq!(cmd.stderr, "".as_bytes());
@@ -290,15 +291,15 @@ fn test_distinfo_algorithm_order() {
         .arg("patch-Makefile")
         .current_dir("tests/data")
         .output()
-        .expect(format!("unable to spawn {}", MKTOOL).as_str());
+        .unwrap_or_else(|_| panic!("unable to spawn {}", MKTOOL));
     let mut outlines = cmd.stdout.split(|c| *c == b'\n');
     assert_eq!(cmd.status.code(), Some(1));
     // Remember that .nth() consumes previous entries...
-    assert!(outlines.nth(0).unwrap().starts_with(b"$NetBSD"));
+    assert!(outlines.next().unwrap().starts_with(b"$NetBSD"));
     assert!(outlines.nth(1).unwrap().starts_with(b"SHA512"));
-    assert!(outlines.nth(0).unwrap().starts_with(b"BLAKE2s"));
+    assert!(outlines.next().unwrap().starts_with(b"BLAKE2s"));
     assert!(outlines.nth(1).unwrap().starts_with(b"RMD160"));
-    assert!(outlines.nth(0).unwrap().starts_with(b"SHA1"));
+    assert!(outlines.next().unwrap().starts_with(b"SHA1"));
     assert_eq!(cmd.stderr, "".as_bytes());
 }
 
@@ -327,7 +328,7 @@ fn test_distinfo_input_file() {
         .arg("distinfo")
         .current_dir("tests/data")
         .output()
-        .expect(format!("unable to spawn {}", MKTOOL).as_str());
+        .unwrap_or_else(|_| panic!("unable to spawn {}", MKTOOL));
     fs::remove_file(&tmpfile).expect("unable to remove temp file");
     assert_eq!(cmd.status.code(), Some(0));
     assert_eq!(cmd.stdout, diout);
@@ -354,7 +355,7 @@ fn test_distinfo_input_stdin() {
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()
-        .expect(format!("unable to spawn {}", MKTOOL).as_str());
+        .unwrap_or_else(|_| panic!("unable to spawn {}", MKTOOL));
     let mut stdin = cmd.stdin.take().expect("failed to open stdin");
     std::thread::spawn(move || {
         stdin
@@ -395,7 +396,7 @@ fn test_distinfo_full() {
         .arg("patch-Makefile")
         .current_dir("tests/data")
         .output()
-        .expect(format!("unable to spawn {}", MKTOOL).as_str());
+        .unwrap_or_else(|_| panic!("unable to spawn {}", MKTOOL));
     assert_eq!(cmd.status.code(), Some(0));
     assert_eq!(cmd.stdout, diout);
     assert_eq!(cmd.stderr, "".as_bytes());
