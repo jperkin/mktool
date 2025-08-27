@@ -1,3 +1,9 @@
+## Version 1.4.3 (2025-08-27)
+
+* Cargo: Update to Rust 2024 edition and upgrade all dependencies.
+
+* Minor clippy fixes from 2024 edition and 1.89.0.
+
 ## Version 1.4.2 (2025-01-14)
 
 * Cargo: Bump pkgsrc-rs dependency to 0.4.1 to fix patches containing
