@@ -84,8 +84,10 @@ first person to reject any move towards a non-portable pkgsrc.
 
 ### What Is The Minimum Support Rust Version?
 
-Currently [1.74.0](https://blog.rust-lang.org/2023/11/16/Rust-1.74.0.html).
+Currently [1.85.1](https://blog.rust-lang.org/2025/03/18/Rust-1.85.1/) for
+minimum compatibility with the 2024 edition of Rust.
 
-The `edition` is set to 2021, so in theory I'd like to have 1.56.0 as the
-MSRV, but newer releases are currently required due to `clap` and `tokio`
-dependency requirements.
+As this is an end-user application and not a library, the MSRV may be bumped a
+little sooner than it would for e.g.
+[pkgsrc-rs](https://crates.io/crates/pkgsrc), but will generally be kept back
+as much as possible unless there are compelling reasons to update.
