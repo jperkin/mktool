@@ -17,7 +17,7 @@
 extern crate glob;
 
 use clap::Args;
-use content_inspector::{inspect, ContentType};
+use content_inspector::{ContentType, inspect};
 use std::fs;
 use std::io::{BufRead, BufReader, Read};
 use walkdir::WalkDir;
@@ -328,7 +328,9 @@ impl Cmd {
                             continue;
                         }
                         if check_random(line) {
-                            eprintln!("WARNING: [check-portability] => Found $RANDOM:");
+                            eprintln!(
+                                "WARNING: [check-portability] => Found $RANDOM:"
+                            );
                             eprintln!(
                                 "WARNING: [check-portability] {}:{}: {}",
                                 mpath.display(),
@@ -338,7 +340,9 @@ impl Cmd {
                             print_random_warning();
                         }
                         if check_test_eq(line) {
-                            eprintln!("ERROR: [check-portability] => Found test ... == ...:");
+                            eprintln!(
+                                "ERROR: [check-portability] => Found test ... == ...:"
+                            );
                             eprintln!(
                                 "ERROR: [check-portability] {}:{}: {}",
                                 mpath.display(),

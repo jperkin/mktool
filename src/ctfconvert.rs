@@ -16,8 +16,8 @@
 
 use crate::MKTOOL_DEFAULT_THREADS;
 use clap::Args;
-use elf::endian::AnyEndian;
 use elf::ElfBytes;
+use elf::endian::AnyEndian;
 use rayon::prelude::*;
 use std::collections::HashSet;
 use std::env;

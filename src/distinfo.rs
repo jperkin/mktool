@@ -173,27 +173,21 @@ impl DistInfo {
             let digest = Digest::from_str(algorithm)?;
             patchsums.push(Checksum::new(digest, String::new()));
         }
-        for path in &self.patchfiles {
-            if path.exists() {
-                if let Some(filename) = path.file_name() {
-                    let fname = filename.to_string_lossy();
-                    if fname.starts_with("patch-local")
-                        || fname.ends_with(".orig")
-                        || fname.ends_with(".rej")
-                        || fname.ends_with("~")
-                    {
-                        continue;
-                    }
-                    let entry = Entry::new(
-                        PathBuf::from(filename),
-                        path,
-                        patchsums.clone(),
-                        None,
-                    );
-                    entries.push(entry);
-                }
-            }
-        }
+        entries.extend(
+            self.patchfiles
+                .iter()
+                .filter(|p| p.exists() && Entry::is_patch_filename(p))
+                .filter_map(|path| {
+                    path.file_name().map(|f| {
+                        Entry::new(
+                            PathBuf::from(f),
+                            path,
+                            patchsums.clone(),
+                            None,
+                        )
+                    })
+                }),
+        );
 
         /*
          * Special case to match distinfo.awk behaviour.  If we were passed a

@@ -14,8 +14,8 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-use crate::check_shlibs::{check_pkg, check_shlib};
 use crate::check_shlibs::{CheckShlibs, CheckState};
+use crate::check_shlibs::{check_pkg, check_shlib};
 use goblin::elf::Elf;
 use std::path::{Path, PathBuf};
 

@@ -292,7 +292,7 @@ fn fetch_and_verify(
      * no choice but to leave it at zero.
      */
     let expected_size = if let Some(di) = distinfo {
-        match di.get_distfile(&file.filepath) {
+        match di.distfile(&file.filepath) {
             Some(e) => e.size.unwrap_or(0),
             None => 0,
         }

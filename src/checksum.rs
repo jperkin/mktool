@@ -197,9 +197,10 @@ impl CheckSum {
         checkfiles.par_iter_mut().for_each(|file| {
             match single_digest {
                 Some(digest) => {
-                    file.results = vec![file
-                        .entry
-                        .verify_checksum(&file.entry.filename, digest)]
+                    file.results = vec![
+                        file.entry
+                            .verify_checksum(&file.entry.filename, digest),
+                    ]
                 }
                 None => {
                     file.results =
