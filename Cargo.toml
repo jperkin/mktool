@@ -12,6 +12,11 @@ documentation = "https://docs.rs/mktool"
 rust-version = "1.85.1"
 edition = "2024"
 
+[features]
+default = ["webpki-roots"]
+webpki-roots = ["dep:rustls", "dep:webpki-roots"]
+native-certs = []
+
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 content_inspector = "0.2.4"
@@ -23,6 +28,8 @@ pkgsrc = "0.8.0"
 rayon = "1.11.0"
 regex = "1.12.2"
 reqwest = { version = "0.13.1", default-features = false, features = ["blocking", "rustls"] }
+rustls = { version = "0.23", optional = true }
+webpki-roots = { version = "1", optional = true }
 suppaftp = "8.0.1"
 thiserror = "2.0.18"
 url = "2.5.8"

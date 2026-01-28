@@ -173,8 +173,7 @@ impl Fetch {
          * Disable the Referer: header, this appears to cause problems with
          * redirect handling when downloading from SourceForge.
          */
-        let client =
-            reqwest::blocking::Client::builder().referer(false).build()?;
+        let client = build_client()?;
 
         files.par_iter_mut().for_each(|file| {
             if fetch_and_verify(&client, file, &distinfo, &progress).is_err() {
@@ -455,6 +454,25 @@ fn fetch_and_verify(
         eprintln!("Failed to remove {}: {e}", temp_name.display());
     }
     Err(FetchError::NotFound)
+}
+
+#[cfg(feature = "webpki-roots")]
+fn build_client() -> Result<Client, reqwest::Error> {
+    let root_store = rustls::RootCertStore::from_iter(
+        webpki_roots::TLS_SERVER_ROOTS.iter().cloned(),
+    );
+    let tls_config = rustls::ClientConfig::builder()
+        .with_root_certificates(root_store)
+        .with_no_client_auth();
+    Client::builder()
+        .referer(false)
+        .tls_backend_preconfigured(tls_config)
+        .build()
+}
+
+#[cfg(not(feature = "webpki-roots"))]
+fn build_client() -> Result<Client, reqwest::Error> {
+    Client::builder().referer(false).build()
 }
 
 /*
