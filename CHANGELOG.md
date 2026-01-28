@@ -1,3 +1,10 @@
+## Version 1.5.0 (2026-01-28)
+
+* fetch: Fix race condition when multiple concurrent builds all fetch the
+  same distfile, leading to checksum failures in bulk builds.
+
+* Cargo: Upgrade all dependencies to latest releases.
+
 ## Version 1.4.3 (2025-08-27)
 
 * Cargo: Update to Rust 2024 edition and upgrade all dependencies.
