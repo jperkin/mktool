@@ -1,3 +1,8 @@
+## Version 1.5.1 (2026-01-28)
+
+* Cargo: Fix webpki-roots option so certificates are loaded correctly, and
+  provide an option to use the native certificate store.
+
 ## Version 1.5.0 (2026-01-28)
 
 * fetch: Fix race condition when multiple concurrent builds all fetch the
