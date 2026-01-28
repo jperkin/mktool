@@ -26,10 +26,14 @@ use std::fs;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
 use std::path::PathBuf;
+use std::process;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 use suppaftp::{FtpStream, types::FileType};
 use thiserror::Error;
 use url::Url;
+
+static FETCH_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Args, Debug)]
 pub struct Fetch {
@@ -286,6 +290,19 @@ fn fetch_and_verify(
     }
 
     /*
+     * Use a unique temporary file to avoid races when parallel builds
+     * fetch the same distfile.  The temp file uses pid + counter to
+     * ensure uniqueness across processes and threads.
+     */
+    let counter = FETCH_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let temp_name = file_name.with_extension(format!(
+        "{}.mktool.{}.{}",
+        file_name.extension().map(|s| s.to_str().unwrap_or("")).unwrap_or(""),
+        process::id(),
+        counter
+    ));
+
+    /*
      * If we cannot determine the length of the remote file (e.g. no
      * Content-Length header) then fall back to the size (if available) that
      * we have recorded in distinfo.  If neither are available then we have
@@ -321,12 +338,41 @@ fn fetch_and_verify(
          * reqwest which issues an error for unsupported protocols.
          */
         if parseurl.scheme() == "ftp" {
-            match fetch_ftp(&parseurl, &file_name, progress) {
-                Ok(len) => return Ok(len),
+            match fetch_ftp(&parseurl, &temp_name, progress) {
+                Ok(_) => {
+                    if let Some(di) = distinfo {
+                        if let Some(entry) = di.distfile(&file.filepath) {
+                            for result in entry.verify_checksums(&temp_name) {
+                                if let Err(e) = result {
+                                    progress.suspend(|| {
+                                        eprintln!(
+                                            "Verification failed for {url}: {e}"
+                                        );
+                                    });
+                                    if let Err(e) = fs::remove_file(&temp_name)
+                                    {
+                                        eprintln!(
+                                            "Failed to remove {}: {e}",
+                                            temp_name.display()
+                                        );
+                                    }
+                                    continue 'nextsite;
+                                }
+                            }
+                        }
+                    }
+                    return rename_to_final(&temp_name, &file_name);
+                }
                 Err(e) => {
                     progress.suspend(|| {
                         eprintln!("Unable to fetch {url}: {e}");
                     });
+                    if let Err(e) = fs::remove_file(&temp_name) {
+                        eprintln!(
+                            "Failed to remove {}: {e}",
+                            temp_name.display()
+                        );
+                    }
                     continue 'nextsite;
                 }
             }
@@ -355,21 +401,33 @@ fn fetch_and_verify(
                 }
 
                 /*
-                 * Write the file and perform distinfo checks.
+                 * Write to temp file, verify checksums, then atomically
+                 * rename to final destination.
                  */
-                let file = File::create(&file_name)?;
-                body.copy_to(&mut progress.wrap_write(&file))?;
+                let tempfile = File::create(&temp_name)?;
+                body.copy_to(&mut progress.wrap_write(&tempfile))?;
+                drop(tempfile);
                 if let Some(di) = distinfo {
-                    for result in di.verify_checksums(&file_name) {
-                        if let Err(e) = result {
-                            progress.suspend(|| {
-                                eprintln!("Verification failed for {url}: {e}");
-                            });
-                            continue 'nextsite;
+                    if let Some(entry) = di.distfile(&file.filepath) {
+                        for result in entry.verify_checksums(&temp_name) {
+                            if let Err(e) = result {
+                                progress.suspend(|| {
+                                    eprintln!(
+                                        "Verification failed for {url}: {e}"
+                                    );
+                                });
+                                if let Err(e) = fs::remove_file(&temp_name) {
+                                    eprintln!(
+                                        "Failed to remove {}: {e}",
+                                        temp_name.display()
+                                    );
+                                }
+                                continue 'nextsite;
+                            }
                         }
                     }
                 }
-                return Ok(file.metadata()?.len());
+                return rename_to_final(&temp_name, &file_name);
             }
             Err(e) => {
                 /*
@@ -393,5 +451,27 @@ fn fetch_and_verify(
             }
         }
     }
+    if let Err(e) = fs::remove_file(&temp_name) {
+        eprintln!("Failed to remove {}: {e}", temp_name.display());
+    }
     Err(FetchError::NotFound)
+}
+
+/*
+ * Atomically rename temp file to final destination.  If the final file
+ * already exists (another process won the race), just remove the temp
+ * file and return success.
+ */
+fn rename_to_final(
+    temp: &PathBuf,
+    final_path: &PathBuf,
+) -> Result<u64, FetchError> {
+    if final_path.exists() {
+        if let Err(e) = fs::remove_file(temp) {
+            eprintln!("Failed to remove {}: {e}", temp.display());
+        }
+        return Ok(final_path.metadata()?.len());
+    }
+    fs::rename(temp, final_path)?;
+    Ok(final_path.metadata()?.len())
 }
