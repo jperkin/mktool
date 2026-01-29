@@ -1,3 +1,8 @@
+## Version 1.5.2 (2026-01-29)
+
+* fetch: Ignore NotFound errors when cleaning up the temporary output file,
+  it may never have existed if all downloads return 404.
+
 ## Version 1.5.1 (2026-01-28)
 
 * Cargo: Fix webpki-roots option so certificates are loaded correctly, and
