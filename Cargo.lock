@@ -1086,7 +1086,7 @@ dependencies = [
 
 [[package]]
 name = "mktool"
-version = "1.5.3"
+version = "1.5.4"
 dependencies = [
  "clap",
  "content_inspector",

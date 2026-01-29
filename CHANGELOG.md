@@ -1,3 +1,8 @@
+## Version 1.5.4 (2026-01-29)
+
+* Cargo: Explicitly enable http2 feature for reqwest, this is pulled in
+  implicitly by rustls but is required when using native-tls.
+
 ## Version 1.5.3 (2026-01-29)
 
 * Cargo: Switch to native-tls for the native-certs option, pkgsrc makes it too
