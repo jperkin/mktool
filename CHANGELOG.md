@@ -1,3 +1,8 @@
+## Version 1.5.3 (2026-01-29)
+
+* Cargo: Switch to native-tls for the native-certs option, pkgsrc makes it too
+  difficult to just find the native certificate store location at present.
+
 ## Version 1.5.2 (2026-01-29)
 
 * fetch: Ignore NotFound errors when cleaning up the temporary output file,
