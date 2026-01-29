@@ -451,7 +451,9 @@ fn fetch_and_verify(
         }
     }
     if let Err(e) = fs::remove_file(&temp_name) {
-        eprintln!("Failed to remove {}: {e}", temp_name.display());
+        if e.kind() != io::ErrorKind::NotFound {
+            eprintln!("Failed to remove {}: {e}", temp_name.display());
+        }
     }
     Err(FetchError::NotFound)
 }
