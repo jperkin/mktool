@@ -14,8 +14,8 @@ edition = "2024"
 
 [features]
 default = ["webpki-roots"]
-webpki-roots = ["dep:rustls", "dep:webpki-roots"]
-native-certs = []
+webpki-roots = ["dep:rustls", "dep:webpki-roots", "reqwest/rustls"]
+native-certs = ["reqwest/native-tls"]
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
@@ -27,7 +27,7 @@ indicatif = "0.18.3"
 pkgsrc = "0.8.0"
 rayon = "1.11.0"
 regex = "1.12.2"
-reqwest = { version = "0.13.1", default-features = false, features = ["blocking", "rustls"] }
+reqwest = { version = "0.13.1", default-features = false, features = ["blocking"] }
 rustls = { version = "0.23", optional = true }
 webpki-roots = { version = "1", optional = true }
 suppaftp = "8.0.1"
