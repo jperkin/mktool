@@ -22,14 +22,12 @@ use std::process::{Command, Stdio};
 const MKTOOL: &str = env!("CARGO_BIN_EXE_mktool");
 
 fn has_temp_files(dir: &Path) -> bool {
-    fs::read_dir(dir)
-        .expect("failed to read directory")
-        .any(|e| {
-            e.expect("failed to read dir entry")
-                .file_name()
-                .to_string_lossy()
-                .contains(".mktool.")
-        })
+    fs::read_dir(dir).expect("failed to read directory").any(|e| {
+        e.expect("failed to read dir entry")
+            .file_name()
+            .to_string_lossy()
+            .contains(".mktool.")
+    })
 }
 
 /*
