@@ -72,7 +72,7 @@ fn fetch_https_http2() {
     let dir = tempfile::tempdir().expect("failed to create tempdir");
     let distdir = dir.path().to_str().expect("invalid tempdir path");
 
-    let input = format!("robots.txt {distdir} https://www.google.com/\n");
+    let input = format!("robots.txt {distdir} https://www.google.com\n");
 
     let mut child = Command::new(MKTOOL)
         .args(["fetch", "-d", distdir, "-I", "-"])
@@ -103,6 +103,7 @@ fn fetch_https_http2() {
 
 /*
  * Verify FTP fetch works, reading input from a file rather than stdin.
+ * Uses a subdirectory in the filepath to exercise create_dir_all().
  */
 #[test]
 fn fetch_ftp() {
@@ -112,7 +113,7 @@ fn fetch_ftp() {
     let input_file = dir.path().join("input");
     fs::write(
         &input_file,
-        format!("robots.txt {distdir} -ftp://ftp.netbsd.org/robots.txt\n"),
+        format!("sub/robots.txt {distdir} -ftp://ftp.netbsd.org/robots.txt\n"),
     )
     .expect("failed to write input file");
 
@@ -134,7 +135,7 @@ fn fetch_ftp() {
 
     assert!(output.status.success(), "fetch failed: {stderr}");
     assert!(
-        dir.path().join("robots.txt").exists(),
+        dir.path().join("sub").join("robots.txt").exists(),
         "downloaded file not found"
     );
     assert!(!has_temp_files(dir.path()), "temp file not cleaned up");
@@ -311,8 +312,7 @@ fn fetch_invalid_input() {
     let distdir = dir.path().to_str().expect("invalid tempdir path");
 
     let mut child = Command::new(MKTOOL)
-        .args(["fetch", "-d", distdir, "-I", "-"])
-        .env("MKTOOL_JOBS", "1")
+        .args(["fetch", "-d", distdir, "-j", "1", "-I", "-"])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
