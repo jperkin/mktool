@@ -62,3 +62,37 @@ fn fetch_https_http2() {
         "downloaded file not found"
     );
 }
+
+#[test]
+fn fetch_ftp() {
+    let dir = tempfile::tempdir().expect("failed to create tempdir");
+    let distdir = dir.path().to_str().expect("invalid tempdir path");
+
+    let input =
+        format!("robots.txt {distdir} -ftp://ftp.netbsd.org/robots.txt\n");
+
+    let mut child = Command::new(MKTOOL)
+        .args(["fetch", "-d", distdir, "-I", "-"])
+        .env("MKTOOL_JOBS", "1")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("failed to run mktool fetch");
+
+    child
+        .stdin
+        .take()
+        .expect("failed to open stdin")
+        .write_all(input.as_bytes())
+        .expect("failed to write to stdin");
+
+    let output = child.wait_with_output().expect("failed to wait on child");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert!(output.status.success(), "fetch failed: {stderr}");
+    assert!(
+        dir.path().join("robots.txt").exists(),
+        "downloaded file not found"
+    );
+}
