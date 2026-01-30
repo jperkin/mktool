@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024 Jonathan Perkin <jonathan@perkin.org.uk>
+ * Copyright (c) 2026 Jonathan Perkin <jonathan@perkin.org.uk>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -348,13 +348,7 @@ fn fetch_and_verify(
                                             "Verification failed for {url}: {e}"
                                         );
                                     });
-                                    if let Err(e) = fs::remove_file(&temp_name)
-                                    {
-                                        eprintln!(
-                                            "Failed to remove {}: {e}",
-                                            temp_name.display()
-                                        );
-                                    }
+                                    remove_temp(&temp_name);
                                     continue 'nextsite;
                                 }
                             }
@@ -366,12 +360,7 @@ fn fetch_and_verify(
                     progress.suspend(|| {
                         eprintln!("Unable to fetch {url}: {e}");
                     });
-                    if let Err(e) = fs::remove_file(&temp_name) {
-                        eprintln!(
-                            "Failed to remove {}: {e}",
-                            temp_name.display()
-                        );
-                    }
+                    remove_temp(&temp_name);
                     continue 'nextsite;
                 }
             }
@@ -415,12 +404,7 @@ fn fetch_and_verify(
                                         "Verification failed for {url}: {e}"
                                     );
                                 });
-                                if let Err(e) = fs::remove_file(&temp_name) {
-                                    eprintln!(
-                                        "Failed to remove {}: {e}",
-                                        temp_name.display()
-                                    );
-                                }
+                                remove_temp(&temp_name);
                                 continue 'nextsite;
                             }
                         }
@@ -450,11 +434,7 @@ fn fetch_and_verify(
             }
         }
     }
-    if let Err(e) = fs::remove_file(&temp_name) {
-        if e.kind() != io::ErrorKind::NotFound {
-            eprintln!("Failed to remove {}: {e}", temp_name.display());
-        }
-    }
+    remove_temp(&temp_name);
     Err(FetchError::NotFound)
 }
 
@@ -475,6 +455,14 @@ fn build_client() -> Result<Client, reqwest::Error> {
 #[cfg(not(feature = "webpki-roots"))]
 fn build_client() -> Result<Client, reqwest::Error> {
     Client::builder().referer(false).build()
+}
+
+fn remove_temp(path: &PathBuf) {
+    if let Err(e) = fs::remove_file(path) {
+        if e.kind() != io::ErrorKind::NotFound {
+            eprintln!("Failed to remove {}: {e}", path.display());
+        }
+    }
 }
 
 /*
