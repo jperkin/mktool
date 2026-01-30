@@ -407,7 +407,16 @@ fn fetch_and_verify(
                  * rename to final destination.
                  */
                 let tempfile = File::create(&temp_name)?;
-                body.copy_to(&mut progress.wrap_write(&tempfile))?;
+                if let Err(e) =
+                    body.copy_to(&mut progress.wrap_write(&tempfile))
+                {
+                    drop(tempfile);
+                    remove_temp(&temp_name);
+                    progress.suspend(|| {
+                        eprintln!("Unable to fetch {url}: {e}");
+                    });
+                    continue 'nextsite;
+                }
                 drop(tempfile);
                 if let Some(di) = distinfo {
                     if let Some(entry) = di.distfile(&file.filepath) {
