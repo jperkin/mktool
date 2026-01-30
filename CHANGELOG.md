@@ -1,3 +1,13 @@
+## Version 1.5.5 (2026-01-30)
+
+* fetch: Support connect timeouts for both HTTP and FTP, and read timeouts
+  for FTP.  `MKTOOL_CONNECT_TIMEOUT` and `MKTOOL_READ_TIMEOUT` allow the
+  defaults to be overriden, primarily useful for tests.
+
+* fetch: Fix temp file leak when HTTP body transfer fails mid-download.
+
+* CI: Add workflows to test both feature sets, and improve test coverage.
+
 ## Version 1.5.4 (2026-01-29)
 
 * Cargo: Explicitly enable http2 feature for reqwest, this is pulled in
