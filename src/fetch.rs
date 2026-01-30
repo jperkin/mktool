@@ -25,15 +25,17 @@ use std::error::Error;
 use std::fs;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
+use std::net::ToSocketAddrs;
 use std::path::PathBuf;
 use std::process;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use suppaftp::{FtpStream, types::FileType};
 use thiserror::Error;
 use url::Url;
 
 static FETCH_COUNTER: AtomicU64 = AtomicU64::new(0);
+const FETCH_TIMEOUT: Duration = Duration::from_secs(60);
 
 #[derive(Args, Debug)]
 pub struct Fetch {
@@ -240,7 +242,18 @@ fn fetch_ftp(
 ) -> Result<u64, FetchError> {
     let host = url.host_str().ok_or(FetchError::NotFound)?;
     let path = url.path();
-    let mut ftp = FtpStream::connect((host, 21))?;
+    let port = url.port().unwrap_or(21);
+    let addr =
+        (host, port).to_socket_addrs()?.next().ok_or(FetchError::NotFound)?;
+    let stream = std::net::TcpStream::connect_timeout(&addr, FETCH_TIMEOUT)
+        .map_err(suppaftp::FtpError::ConnectionError)?;
+    stream
+        .set_read_timeout(Some(FETCH_TIMEOUT))
+        .map_err(suppaftp::FtpError::ConnectionError)?;
+    stream
+        .set_write_timeout(Some(FETCH_TIMEOUT))
+        .map_err(suppaftp::FtpError::ConnectionError)?;
+    let mut ftp = FtpStream::connect_with_stream(stream)?;
     ftp.login("anonymous", "anonymous")?;
     ftp.transfer_type(FileType::Binary)?;
     let mut ftpfile = ftp.retr_as_stream(path)?;
@@ -448,13 +461,14 @@ fn build_client() -> Result<Client, reqwest::Error> {
         .with_no_client_auth();
     Client::builder()
         .referer(false)
+        .connect_timeout(FETCH_TIMEOUT)
         .tls_backend_preconfigured(tls_config)
         .build()
 }
 
 #[cfg(not(feature = "webpki-roots"))]
 fn build_client() -> Result<Client, reqwest::Error> {
-    Client::builder().referer(false).build()
+    Client::builder().referer(false).connect_timeout(FETCH_TIMEOUT).build()
 }
 
 fn remove_temp(path: &PathBuf) {
