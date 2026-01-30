@@ -16,10 +16,35 @@
 
 use std::fs;
 use std::io::Write;
+use std::net::TcpListener;
 use std::path::Path;
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
+use std::time::Instant;
 
 const MKTOOL: &str = env!("CARGO_BIN_EXE_mktool");
+
+fn free_port() -> u16 {
+    TcpListener::bind("127.0.0.1:0")
+        .expect("failed to bind")
+        .local_addr()
+        .expect("failed to get local addr")
+        .port()
+}
+
+fn start_nc(port: u16, initial_response: &str) -> Child {
+    Command::new("sh")
+        .args([
+            "-c",
+            &format!(
+                "(printf '{initial_response}'; cat) | nc -l 127.0.0.1 {port}"
+            ),
+        ])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("failed to start nc")
+}
 
 fn has_temp_files(dir: &Path) -> bool {
     fs::read_dir(dir).expect("failed to read directory").any(|e| {
@@ -218,6 +243,108 @@ fn fetch_ftp_bad_checksum() {
     assert!(
         !dir.path().join("robots.txt").exists(),
         "failed file should have been cleaned up"
+    );
+    assert!(!has_temp_files(dir.path()), "temp file not cleaned up");
+}
+
+/*
+ * Verify that a stalled FTP server triggers a read timeout and does not
+ * hang indefinitely.  The nc listener sends the FTP greeting but never
+ * responds to any commands.
+ */
+#[test]
+fn fetch_ftp_read_timeout() {
+    let port = free_port();
+    let mut nc = start_nc(port, "220 ready\\r\\n");
+
+    let dir = tempfile::tempdir().expect("failed to create tempdir");
+    let distdir = dir.path().to_str().expect("invalid tempdir path");
+    let input =
+        format!("test.txt {distdir} -ftp://127.0.0.1:{port}/test.txt\n");
+
+    let start = Instant::now();
+
+    let mut child = Command::new(MKTOOL)
+        .args(["fetch", "-d", distdir, "-I", "-"])
+        .env("MKTOOL_JOBS", "1")
+        .env("MKTOOL_READ_TIMEOUT", "2")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("failed to run mktool fetch");
+
+    child
+        .stdin
+        .take()
+        .expect("failed to open stdin")
+        .write_all(input.as_bytes())
+        .expect("failed to write to stdin");
+
+    let output = child.wait_with_output().expect("failed to wait on child");
+    let elapsed = start.elapsed();
+
+    let _ = nc.kill();
+    let _ = nc.wait();
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert!(!output.status.success(), "fetch should have failed: {stderr}");
+    assert!(
+        elapsed.as_secs() < 30,
+        "read timeout did not fire, took {elapsed:?}"
+    );
+    assert!(!has_temp_files(dir.path()), "temp file not cleaned up");
+}
+
+/*
+ * Verify that a stalled HTTP server triggers a read timeout.  The nc
+ * listener sends valid HTTP headers but never sends the body.
+ */
+#[test]
+fn fetch_http_read_timeout() {
+    let port = free_port();
+    let mut nc = start_nc(
+        port,
+        "HTTP/1.1 200 OK\\r\\nContent-Length: 99999\\r\\n\\r\\n",
+    );
+
+    let dir = tempfile::tempdir().expect("failed to create tempdir");
+    let distdir = dir.path().to_str().expect("invalid tempdir path");
+    let input =
+        format!("test.txt {distdir} -http://127.0.0.1:{port}/test.txt\n");
+
+    let start = Instant::now();
+
+    let mut child = Command::new(MKTOOL)
+        .args(["fetch", "-d", distdir, "-I", "-"])
+        .env("MKTOOL_JOBS", "1")
+        .env("MKTOOL_READ_TIMEOUT", "2")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("failed to run mktool fetch");
+
+    child
+        .stdin
+        .take()
+        .expect("failed to open stdin")
+        .write_all(input.as_bytes())
+        .expect("failed to write to stdin");
+
+    let output = child.wait_with_output().expect("failed to wait on child");
+    let elapsed = start.elapsed();
+
+    let _ = nc.kill();
+    let _ = nc.wait();
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert!(!output.status.success(), "fetch should have failed: {stderr}");
+    assert!(
+        elapsed.as_secs() < 30,
+        "read timeout did not fire, took {elapsed:?}"
     );
     assert!(!has_temp_files(dir.path()), "temp file not cleaned up");
 }
