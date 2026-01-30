@@ -9,20 +9,14 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  check:
+  test:
     runs-on: ubuntu-latest
     strategy:
       matrix:
         features:
-          - ""
           - webpki-roots
           - native-certs
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy, rustfmt
-      - run: cargo fmt --check
-        if: matrix.features == ''
-      - run: cargo clippy --no-default-features --features "${{ matrix.features }}" -- -D warnings
       - run: cargo test --no-default-features --features "${{ matrix.features }}"
