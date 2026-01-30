@@ -35,7 +35,8 @@ use thiserror::Error;
 use url::Url;
 
 static FETCH_COUNTER: AtomicU64 = AtomicU64::new(0);
-const FETCH_TIMEOUT: Duration = Duration::from_secs(60);
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
+const READ_TIMEOUT: Duration = Duration::from_secs(60);
 
 #[derive(Args, Debug)]
 pub struct Fetch {
@@ -245,13 +246,13 @@ fn fetch_ftp(
     let port = url.port().unwrap_or(21);
     let addr =
         (host, port).to_socket_addrs()?.next().ok_or(FetchError::NotFound)?;
-    let stream = std::net::TcpStream::connect_timeout(&addr, FETCH_TIMEOUT)
+    let stream = std::net::TcpStream::connect_timeout(&addr, CONNECT_TIMEOUT)
         .map_err(suppaftp::FtpError::ConnectionError)?;
     stream
-        .set_read_timeout(Some(FETCH_TIMEOUT))
+        .set_read_timeout(Some(READ_TIMEOUT))
         .map_err(suppaftp::FtpError::ConnectionError)?;
     stream
-        .set_write_timeout(Some(FETCH_TIMEOUT))
+        .set_write_timeout(Some(READ_TIMEOUT))
         .map_err(suppaftp::FtpError::ConnectionError)?;
     let mut ftp = FtpStream::connect_with_stream(stream)?;
     ftp.login("anonymous", "anonymous")?;
@@ -461,14 +462,14 @@ fn build_client() -> Result<Client, reqwest::Error> {
         .with_no_client_auth();
     Client::builder()
         .referer(false)
-        .connect_timeout(FETCH_TIMEOUT)
+        .connect_timeout(CONNECT_TIMEOUT)
         .tls_backend_preconfigured(tls_config)
         .build()
 }
 
 #[cfg(not(feature = "webpki-roots"))]
 fn build_client() -> Result<Client, reqwest::Error> {
-    Client::builder().referer(false).connect_timeout(FETCH_TIMEOUT).build()
+    Client::builder().referer(false).connect_timeout(CONNECT_TIMEOUT).build()
 }
 
 fn remove_temp(path: &PathBuf) {
