@@ -70,10 +70,9 @@ impl CheckSum {
          */
         let distinfo = match fs::read(&self.distinfo) {
             Ok(s) => s,
-            Err(_) => {
-                /* Compatible output/exit status with checksum.awk */
+            Err(e) => {
                 eprintln!(
-                    "checksum: distinfo file missing: {}",
+                    "checksum: distinfo file {}: {e}",
                     &self.distinfo.display()
                 );
                 return Ok(3);
@@ -119,11 +118,7 @@ impl CheckSum {
         }
         for file in &self.files {
             if let Some(suffix) = &self.stripsuffix {
-                match file
-                    .to_str()
-                    .expect("filename is not valid UTF-8")
-                    .strip_suffix(suffix)
-                {
+                match file.to_str().and_then(|s| s.strip_suffix(suffix)) {
                     Some(s) => inputfiles.insert(PathBuf::from(s)),
                     None => inputfiles.insert(PathBuf::from(file)),
                 };
@@ -181,7 +176,15 @@ impl CheckSum {
         let nthreads = match self.jobs {
             Some(n) => n,
             None => match env::var("MKTOOL_JOBS") {
-                Ok(n) => n.parse::<usize>().unwrap_or(MKTOOL_DEFAULT_THREADS),
+                Ok(n) => match n.parse::<usize>() {
+                    Ok(n) => n,
+                    Err(e) => {
+                        eprintln!(
+                            "WARNING: invalid MKTOOL_JOBS '{n}': {e}, using default"
+                        );
+                        MKTOOL_DEFAULT_THREADS
+                    }
+                },
                 Err(_) => MKTOOL_DEFAULT_THREADS,
             },
         };

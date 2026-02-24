@@ -22,6 +22,8 @@ use std::process::{Command, Stdio};
 
 const MKTOOL: &str = env!("CARGO_BIN_EXE_mktool");
 
+type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
+
 /*
  * Invalid arguments.
  *
@@ -29,47 +31,46 @@ const MKTOOL: &str = env!("CARGO_BIN_EXE_mktool");
  * unfortunatly this is hardcoded in clap.
  */
 #[test]
-fn test_checksum_invalid_args() {
-    let cmd = Command::new(MKTOOL)
-        .arg("checksum")
-        .output()
-        .unwrap_or_else(|_| panic!("unable to exec {}", MKTOOL));
+fn test_checksum_invalid_args() -> Result<()> {
+    let cmd = Command::new(MKTOOL).arg("checksum").output()?;
     assert_eq!(cmd.status.code(), Some(2));
+    Ok(())
 }
 
 /*
  * Test running with no input files.
  */
 #[test]
-fn test_checksum_no_input() {
+fn test_checksum_no_input() -> Result<()> {
     let mut distinfo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     distinfo.push("tests/data/distinfo");
-    let cmd = Command::new(MKTOOL)
-        .arg("checksum")
-        .arg(distinfo)
-        .output()
-        .unwrap_or_else(|_| panic!("unable to exec {}", MKTOOL));
+    let cmd = Command::new(MKTOOL).arg("checksum").arg(distinfo).output()?;
     assert_eq!(cmd.status.code(), Some(0));
     assert_eq!(cmd.stdout, "".as_bytes());
     assert_eq!(cmd.stderr, "".as_bytes());
+    Ok(())
 }
 
 /*
- * Pass a nonexistent distinfo file.
+ * Pass a nonexistent distinfo file.  The error message should include both
+ * the filename and the reason for the failure.
  */
 #[test]
-fn test_checksum_bad_distinfo() {
+fn test_checksum_bad_distinfo() -> Result<()> {
     let distinfo = PathBuf::from("/nonexistent");
-    let output =
-        format!("checksum: distinfo file missing: {}\n", distinfo.display());
-    let cmd = Command::new(MKTOOL)
-        .arg("checksum")
-        .arg(distinfo)
-        .output()
-        .unwrap_or_else(|_| panic!("unable to exec {}", MKTOOL));
+    let cmd = Command::new(MKTOOL).arg("checksum").arg(&distinfo).output()?;
+    let stderr = String::from_utf8_lossy(&cmd.stderr);
     assert_eq!(cmd.status.code(), Some(3));
     assert_eq!(cmd.stdout, "".as_bytes());
-    assert_eq!(cmd.stderr, output.as_bytes());
+    assert!(
+        stderr.contains("/nonexistent"),
+        "expected filename in error: {stderr}"
+    );
+    assert!(
+        stderr.contains("No such file") || stderr.contains("not found"),
+        "expected error reason: {stderr}"
+    );
+    Ok(())
 }
 
 /*
@@ -77,28 +78,28 @@ fn test_checksum_bad_distinfo() {
  * to stderr and exit 2.
  */
 #[test]
-fn test_checksum_bad_distfile() {
+fn test_checksum_bad_distfile() -> Result<()> {
     let mut distinfo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     distinfo.push("tests/data/distinfo");
     let cmd = Command::new(MKTOOL)
         .arg("checksum")
         .arg(&distinfo)
         .arg("foo")
-        .output()
-        .unwrap_or_else(|_| panic!("unable to exec {}", MKTOOL));
+        .output()?;
     assert_eq!(cmd.status.code(), Some(2));
     assert_eq!(cmd.stdout, "".as_bytes());
     assert_eq!(
         cmd.stderr,
         "checksum: No checksum recorded for foo\n".as_bytes()
     );
+    Ok(())
 }
 
 /*
  * Tests against a valid full distfile test.
  */
 #[test]
-fn test_checksum_valid_distfile() {
+fn test_checksum_valid_distfile() -> Result<()> {
     let mut distinfo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     distinfo.push("tests/data/distinfo");
     let output = format!(
@@ -111,8 +112,7 @@ fn test_checksum_valid_distfile() {
         .arg(&distinfo)
         .arg("digest1.txt")
         .current_dir("tests/data")
-        .output()
-        .unwrap_or_else(|_| panic!("unable to exec {}", MKTOOL));
+        .output()?;
     assert_eq!(cmd.status.code(), Some(0));
     assert_eq!(cmd.stdout, output.as_bytes());
     assert_eq!(cmd.stderr, "".as_bytes());
@@ -126,8 +126,7 @@ fn test_checksum_valid_distfile() {
         .arg(&distinfo)
         .arg("../data/digest1.txt")
         .current_dir("tests/data")
-        .output()
-        .unwrap_or_else(|_| panic!("unable to exec {}", MKTOOL));
+        .output()?;
     assert_eq!(cmd.status.code(), Some(0));
     assert_eq!(cmd.stdout, output.as_bytes());
     assert_eq!(cmd.stderr, "".as_bytes());
@@ -142,8 +141,7 @@ fn test_checksum_valid_distfile() {
         .arg(&distinfo)
         .arg("digest1.txt")
         .current_dir("tests/data")
-        .output()
-        .unwrap_or_else(|_| panic!("unable to exec {}", MKTOOL));
+        .output()?;
     assert_eq!(cmd.status.code(), Some(0));
     assert_eq!(cmd.stdout, output.as_bytes());
     assert_eq!(cmd.stderr, "".as_bytes());
@@ -156,8 +154,7 @@ fn test_checksum_valid_distfile() {
         .arg(&distinfo)
         .arg("digest2.txt")
         .current_dir("tests/data")
-        .output()
-        .unwrap_or_else(|_| panic!("unable to exec {}", MKTOOL));
+        .output()?;
     assert_eq!(cmd.status.code(), Some(0));
     assert_eq!(cmd.stdout, output.as_bytes());
     assert_eq!(cmd.stderr, "".as_bytes());
@@ -181,23 +178,23 @@ fn test_checksum_valid_distfile() {
         .arg("digest11.txt")
         .arg("digest1.txt")
         .current_dir("tests/data")
-        .output()
-        .unwrap_or_else(|_| panic!("unable to exec {}", MKTOOL));
+        .output()?;
     assert_eq!(cmd.status.code(), Some(2));
     assert_eq!(cmd.stdout, output.as_bytes());
     assert_eq!(cmd.stderr, outerr.as_bytes());
+    Ok(())
 }
 
 /*
  * Test input from file / stdin.
  */
 #[test]
-fn test_checksum_input_file() {
+fn test_checksum_input_file() -> Result<()> {
     let mut distinfo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     distinfo.push("tests/data/distinfo");
     let tmpdir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"));
     let tmpfile = tmpdir.join("test_checksum_input_file.txt");
-    fs::write(&tmpfile, "digest2.txt\n").expect("unable to write temp file");
+    fs::write(&tmpfile, "digest2.txt\n")?;
     let output = format!(
         "{}\n{}\n{}\n{}\n",
         "=> Checksum BLAKE2s OK for digest1.txt",
@@ -212,16 +209,16 @@ fn test_checksum_input_file() {
         .arg(&tmpfile)
         .arg("digest1.txt")
         .current_dir("tests/data")
-        .output()
-        .unwrap_or_else(|_| panic!("unable to spawn {}", MKTOOL));
-    fs::remove_file(&tmpfile).expect("unable to remove temp file");
+        .output()?;
+    fs::remove_file(&tmpfile)?;
     assert_eq!(cmd.status.code(), Some(0));
     assert_eq!(cmd.stdout, output.as_bytes());
     assert_eq!(cmd.stderr, "".as_bytes());
+    Ok(())
 }
 
 #[test]
-fn test_checksum_input_stdin() {
+fn test_checksum_input_stdin() -> Result<()> {
     let mut distinfo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     distinfo.push("tests/data/distinfo");
     let output = format!(
@@ -240,18 +237,16 @@ fn test_checksum_input_stdin() {
         .current_dir("tests/data")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .spawn()
-        .unwrap_or_else(|_| panic!("unable to spawn {}", MKTOOL));
-    let mut stdin = cmd.stdin.take().expect("failed to open stdin");
+        .spawn()?;
+    let mut stdin = cmd.stdin.take().ok_or("failed to open stdin")?;
     std::thread::spawn(move || {
-        stdin
-            .write_all("digest1.txt".as_bytes())
-            .expect("failed to write to stdin");
+        let _ = stdin.write_all("digest1.txt".as_bytes());
     });
-    let out = cmd.wait_with_output().expect("failed to wait on child");
+    let out = cmd.wait_with_output()?;
     assert_eq!(out.status.code(), Some(0));
     assert_eq!(out.stdout, output.as_bytes());
     assert_eq!(out.stderr, "".as_bytes());
+    Ok(())
 }
 
 /*
@@ -259,7 +254,7 @@ fn test_checksum_input_stdin() {
  * against the digest1.txt distinfo entry.
  */
 #[test]
-fn test_checksum_strip_mode() {
+fn test_checksum_strip_mode() -> Result<()> {
     let mut distinfo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     distinfo.push("tests/data/distinfo");
 
@@ -273,8 +268,7 @@ fn test_checksum_strip_mode() {
         .arg(&distinfo)
         .arg("digest1.txt.suffix")
         .current_dir("tests/data")
-        .output()
-        .unwrap_or_else(|_| panic!("unable to exec {}", MKTOOL));
+        .output()?;
     assert_eq!(cmd.status.code(), Some(0));
     assert_eq!(cmd.stdout, output.as_bytes());
     assert_eq!(cmd.stderr, "".as_bytes());
@@ -288,18 +282,191 @@ fn test_checksum_strip_mode() {
         .arg(&distinfo)
         .arg("digest1.txt.suffix")
         .current_dir("tests/data")
-        .output()
-        .unwrap_or_else(|_| panic!("unable to exec {}", MKTOOL));
+        .output()?;
     assert_eq!(cmd.status.code(), Some(2));
     assert_eq!(cmd.stdout, "".as_bytes());
     assert_eq!(cmd.stderr, output.as_bytes());
+    Ok(())
+}
+
+/*
+ * Test strip suffix mode via -I input file.
+ */
+#[test]
+fn test_checksum_strip_input() -> Result<()> {
+    let mut distinfo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    distinfo.push("tests/data/distinfo");
+    let tmpdir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"));
+    let tmpfile = tmpdir.join("test_checksum_strip_input.txt");
+    fs::write(&tmpfile, "digest1.txt.suffix\n")?;
+    let output = "=> Checksum SHA512 OK for digest1.txt\n";
+    let cmd = Command::new(MKTOOL)
+        .arg("checksum")
+        .arg("-a")
+        .arg("SHA512")
+        .arg("-s")
+        .arg(".suffix")
+        .arg("-I")
+        .arg(&tmpfile)
+        .arg(&distinfo)
+        .current_dir("tests/data")
+        .output()?;
+    fs::remove_file(&tmpfile)?;
+    assert_eq!(cmd.status.code(), Some(0));
+    assert_eq!(cmd.stdout, output.as_bytes());
+    assert_eq!(cmd.stderr, "".as_bytes());
+
+    /*
+     * Input file with suffix that doesn't match should use the original
+     * filename for the distinfo lookup.
+     */
+    let tmpfile = tmpdir.join("test_checksum_strip_input_nomatch.txt");
+    fs::write(&tmpfile, "digest1.txt\n")?;
+    let output = "=> Checksum SHA512 OK for digest1.txt\n";
+    let cmd = Command::new(MKTOOL)
+        .arg("checksum")
+        .arg("-a")
+        .arg("SHA512")
+        .arg("-s")
+        .arg(".badsuffix")
+        .arg("-I")
+        .arg(&tmpfile)
+        .arg(&distinfo)
+        .current_dir("tests/data")
+        .output()?;
+    fs::remove_file(&tmpfile)?;
+    assert_eq!(cmd.status.code(), Some(0));
+    assert_eq!(cmd.stdout, output.as_bytes());
+    assert_eq!(cmd.stderr, "".as_bytes());
+    Ok(())
+}
+
+/*
+ * Passing a nonexistent file to -I should print an error and exit 1.
+ */
+#[test]
+fn test_checksum_bad_input_file() -> Result<()> {
+    let mut distinfo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    distinfo.push("tests/data/distinfo");
+    let cmd = Command::new(MKTOOL)
+        .arg("checksum")
+        .arg("-I")
+        .arg("/nonexistent/inputfile")
+        .arg(&distinfo)
+        .output()?;
+    let stderr = String::from_utf8_lossy(&cmd.stderr);
+    assert_eq!(cmd.status.code(), Some(1));
+    assert!(
+        stderr.contains("/nonexistent/inputfile"),
+        "expected filename in error: {stderr}"
+    );
+    assert!(
+        stderr.contains("No such file") || stderr.contains("not found"),
+        "expected error reason: {stderr}"
+    );
+    Ok(())
+}
+
+/*
+ * Missing distfile with a specific algorithm requested should include the
+ * algorithm name in the error message.
+ */
+#[test]
+fn test_checksum_bad_distfile_algorithm() -> Result<()> {
+    let mut distinfo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    distinfo.push("tests/data/distinfo");
+    let cmd = Command::new(MKTOOL)
+        .arg("checksum")
+        .arg("-a")
+        .arg("SHA512")
+        .arg(&distinfo)
+        .arg("foo")
+        .output()?;
+    assert_eq!(cmd.status.code(), Some(2));
+    assert_eq!(cmd.stdout, "".as_bytes());
+    assert_eq!(
+        cmd.stderr,
+        "checksum: No SHA512 checksum recorded for foo\n".as_bytes()
+    );
+    Ok(())
+}
+
+/*
+ * Invalid algorithm name.
+ */
+#[test]
+fn test_checksum_bad_algorithm() -> Result<()> {
+    let mut distinfo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    distinfo.push("tests/data/distinfo");
+    let cmd = Command::new(MKTOOL)
+        .arg("checksum")
+        .arg("-a")
+        .arg("BOGUS")
+        .arg(&distinfo)
+        .arg("digest1.txt")
+        .current_dir("tests/data")
+        .output()?;
+    let stderr = String::from_utf8_lossy(&cmd.stderr);
+    assert_ne!(cmd.status.code(), Some(0));
+    assert!(
+        stderr.contains("BOGUS"),
+        "expected algorithm name in error: {stderr}"
+    );
+    Ok(())
+}
+
+/*
+ * Verify -j flag is accepted.
+ */
+#[test]
+fn test_checksum_jobs_flag() -> Result<()> {
+    let mut distinfo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    distinfo.push("tests/data/distinfo");
+    let output = "=> Checksum SHA512 OK for digest1.txt\n";
+    let cmd = Command::new(MKTOOL)
+        .arg("checksum")
+        .arg("-a")
+        .arg("SHA512")
+        .arg("-j")
+        .arg("1")
+        .arg(&distinfo)
+        .arg("digest1.txt")
+        .current_dir("tests/data")
+        .output()?;
+    assert_eq!(cmd.status.code(), Some(0));
+    assert_eq!(cmd.stdout, output.as_bytes());
+    assert_eq!(cmd.stderr, "".as_bytes());
+    Ok(())
+}
+
+/*
+ * Verify MKTOOL_JOBS environment variable is accepted.
+ */
+#[test]
+fn test_checksum_jobs_env() -> Result<()> {
+    let mut distinfo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    distinfo.push("tests/data/distinfo");
+    let output = "=> Checksum SHA512 OK for digest1.txt\n";
+    let cmd = Command::new(MKTOOL)
+        .arg("checksum")
+        .arg("-a")
+        .arg("SHA512")
+        .arg(&distinfo)
+        .arg("digest1.txt")
+        .env("MKTOOL_JOBS", "1")
+        .current_dir("tests/data")
+        .output()?;
+    assert_eq!(cmd.status.code(), Some(0));
+    assert_eq!(cmd.stdout, output.as_bytes());
+    assert_eq!(cmd.stderr, "".as_bytes());
+    Ok(())
 }
 
 /*
  * No checksum type recorded.
  */
 #[test]
-fn test_checksum_no_checksum() {
+fn test_checksum_no_checksum() -> Result<()> {
     let mut distinfo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     distinfo.push("tests/data/distinfo");
     let output = format!(
@@ -315,18 +482,18 @@ fn test_checksum_no_checksum() {
         .arg("digest1.txt")
         .arg("nonexistent.txt")
         .current_dir("tests/data")
-        .output()
-        .unwrap_or_else(|_| panic!("unable to exec {}", MKTOOL));
+        .output()?;
     assert_eq!(cmd.status.code(), Some(2));
     assert_eq!(cmd.stdout, "".as_bytes());
     assert_eq!(cmd.stderr, output.as_bytes());
+    Ok(())
 }
 
 /*
  * Patch mode.
  */
 #[test]
-fn test_checksum_patch() {
+fn test_checksum_patch() -> Result<()> {
     let mut distinfo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     distinfo.push("tests/data/distinfo");
     let output = "=> Checksum SHA1 OK for patch-Makefile\n";
@@ -336,11 +503,11 @@ fn test_checksum_patch() {
         .arg(&distinfo)
         .arg("patch-Makefile")
         .current_dir("tests/data")
-        .output()
-        .unwrap_or_else(|_| panic!("unable to exec {}", MKTOOL));
+        .output()?;
     assert_eq!(cmd.status.code(), Some(0));
     assert_eq!(cmd.stdout, output.as_bytes());
     assert_eq!(cmd.stderr, "".as_bytes());
+    Ok(())
 }
 
 /*
@@ -348,7 +515,7 @@ fn test_checksum_patch() {
  * ensuring that find_entry() functionality is tested.
  */
 #[test]
-fn test_checksum_patch_path() {
+fn test_checksum_patch_path() -> Result<()> {
     let mut distinfo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     distinfo.push("tests/data/distinfo");
     let output = "=> Checksum SHA1 OK for patch-Makefile\n";
@@ -358,11 +525,11 @@ fn test_checksum_patch_path() {
         .arg(&distinfo)
         .arg("../data/patch-Makefile")
         .current_dir("tests/data")
-        .output()
-        .unwrap_or_else(|_| panic!("unable to exec {}", MKTOOL));
+        .output()?;
     assert_eq!(cmd.status.code(), Some(0));
     assert_eq!(cmd.stdout, output.as_bytes());
     assert_eq!(cmd.stderr, "".as_bytes());
+    Ok(())
 }
 
 /*
@@ -370,7 +537,7 @@ fn test_checksum_patch_path() {
  * invalid checksums.
  */
 #[test]
-fn test_checksum_mismatch() {
+fn test_checksum_mismatch() -> Result<()> {
     let mut distinfo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     distinfo.push("tests/data/distinfo.bad");
 
@@ -381,8 +548,7 @@ fn test_checksum_mismatch() {
         .arg(&distinfo)
         .arg("digest1.txt")
         .current_dir("tests/data")
-        .output()
-        .unwrap_or_else(|_| panic!("unable to exec {}", MKTOOL));
+        .output()?;
     assert_eq!(cmd.status.code(), Some(1));
     assert_eq!(cmd.stdout, "".as_bytes());
     assert_eq!(cmd.stderr, output.as_bytes());
@@ -395,8 +561,7 @@ fn test_checksum_mismatch() {
         .arg(&distinfo)
         .arg("digest1.txt")
         .current_dir("tests/data")
-        .output()
-        .unwrap_or_else(|_| panic!("unable to exec {}", MKTOOL));
+        .output()?;
     assert_eq!(cmd.status.code(), Some(1));
     assert_eq!(cmd.stdout, "".as_bytes());
     assert_eq!(cmd.stderr, output.as_bytes());
@@ -408,9 +573,9 @@ fn test_checksum_mismatch() {
         .arg(&distinfo)
         .arg("patch-Makefile")
         .current_dir("tests/data")
-        .output()
-        .unwrap_or_else(|_| panic!("unable to exec {}", MKTOOL));
+        .output()?;
     assert_eq!(cmd.status.code(), Some(1));
     assert_eq!(cmd.stdout, "".as_bytes());
     assert_eq!(cmd.stderr, output.as_bytes());
+    Ok(())
 }
