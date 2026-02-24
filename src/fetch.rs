@@ -37,20 +37,32 @@ use url::Url;
 
 static FETCH_COUNTER: AtomicU64 = AtomicU64::new(0);
 static CONNECT_TIMEOUT: LazyLock<Duration> = LazyLock::new(|| {
-    Duration::from_secs(
-        env::var("MKTOOL_CONNECT_TIMEOUT")
-            .ok()
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(15),
-    )
+    Duration::from_secs(match env::var("MKTOOL_CONNECT_TIMEOUT") {
+        Ok(v) => match v.parse() {
+            Ok(n) => n,
+            Err(e) => {
+                eprintln!(
+                    "WARNING: invalid MKTOOL_CONNECT_TIMEOUT '{v}': {e}, using default"
+                );
+                15
+            }
+        },
+        Err(_) => 15,
+    })
 });
 static READ_TIMEOUT: LazyLock<Duration> = LazyLock::new(|| {
-    Duration::from_secs(
-        env::var("MKTOOL_READ_TIMEOUT")
-            .ok()
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(60),
-    )
+    Duration::from_secs(match env::var("MKTOOL_READ_TIMEOUT") {
+        Ok(v) => match v.parse() {
+            Ok(n) => n,
+            Err(e) => {
+                eprintln!(
+                    "WARNING: invalid MKTOOL_READ_TIMEOUT '{v}': {e}, using default"
+                );
+                60
+            }
+        },
+        Err(_) => 60,
+    })
 });
 
 #[derive(Args, Debug)]
@@ -100,9 +112,19 @@ impl Fetch {
         let started = Instant::now();
         let mut files: Vec<FetchFile> = vec![];
 
-        let distinfo = self.distinfo.as_ref().map(|s| {
-            Distinfo::from_bytes(&fs::read(s).expect("unable to read distinfo"))
-        });
+        let distinfo = match &self.distinfo {
+            Some(s) => match fs::read(s) {
+                Ok(buf) => Some(Distinfo::from_bytes(&buf)),
+                Err(e) => {
+                    eprintln!(
+                        "fetch: unable to read distinfo {}: {e}",
+                        s.display()
+                    );
+                    return Ok(1);
+                }
+            },
+            None => None,
+        };
 
         if let Some(input) = &self.input {
             let reader: Box<dyn io::BufRead> = match input.to_str() {
@@ -143,13 +165,17 @@ impl Fetch {
                  * both indicatif and reqwest requiring String or str.  So for
                  * now just give up if we can't convert.
                  */
-                let filename = String::from(
-                    filepath
-                        .file_name()
-                        .expect("unable to extract filename")
-                        .to_str()
-                        .unwrap_or("blah"),
-                );
+                let filename =
+                    match filepath.file_name().and_then(|f| f.to_str()) {
+                        Some(f) => f.to_string(),
+                        None => {
+                            eprintln!(
+                                "fetch: invalid filename: {}",
+                                filepath.display()
+                            );
+                            return Ok(1);
+                        }
+                    };
                 files.push(FetchFile {
                     filepath,
                     filename,
@@ -167,7 +193,15 @@ impl Fetch {
         let nthreads = match self.jobs {
             Some(n) => n,
             None => match env::var("MKTOOL_JOBS") {
-                Ok(n) => n.parse::<usize>().unwrap_or(MKTOOL_DEFAULT_THREADS),
+                Ok(n) => match n.parse::<usize>() {
+                    Ok(n) => n,
+                    Err(e) => {
+                        eprintln!(
+                            "WARNING: invalid MKTOOL_JOBS '{n}': {e}, using default"
+                        );
+                        MKTOOL_DEFAULT_THREADS
+                    }
+                },
                 Err(_) => MKTOOL_DEFAULT_THREADS,
             },
         };

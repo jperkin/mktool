@@ -24,15 +24,13 @@ use std::time::{Duration, Instant};
 
 const MKTOOL: &str = env!("CARGO_BIN_EXE_mktool");
 
-fn free_port() -> u16 {
-    TcpListener::bind("127.0.0.1:0")
-        .expect("failed to bind")
-        .local_addr()
-        .expect("failed to get local addr")
-        .port()
+type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
+
+fn free_port() -> Result<u16> {
+    Ok(TcpListener::bind("127.0.0.1:0")?.local_addr()?.port())
 }
 
-fn start_nc(port: u16, initial_response: &str) -> Child {
+fn start_nc(port: u16, initial_response: &str) -> Result<Child> {
     let child = Command::new("sh")
         .args([
             "-c",
@@ -43,10 +41,9 @@ fn start_nc(port: u16, initial_response: &str) -> Child {
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
-        .spawn()
-        .expect("failed to start nc");
+        .spawn()?;
     wait_for_port(port);
-    child
+    Ok(child)
 }
 
 fn wait_for_port(port: u16) {
@@ -60,13 +57,13 @@ fn wait_for_port(port: u16) {
     panic!("nc did not start listening on port {port} in time");
 }
 
-fn has_temp_files(dir: &Path) -> bool {
-    fs::read_dir(dir).expect("failed to read directory").any(|e| {
-        e.expect("failed to read dir entry")
-            .file_name()
-            .to_string_lossy()
-            .contains(".mktool.")
-    })
+fn has_temp_files(dir: &Path) -> Result<bool> {
+    for entry in fs::read_dir(dir)? {
+        if entry?.file_name().to_string_lossy().contains(".mktool.") {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 /*
@@ -79,9 +76,9 @@ fn has_temp_files(dir: &Path) -> bool {
  * to the site URL, exercising the url_from_site() non-direct path.
  */
 #[test]
-fn fetch_https_http2() {
-    let dir = tempfile::tempdir().expect("failed to create tempdir");
-    let distdir = dir.path().to_str().expect("invalid tempdir path");
+fn fetch_https_http2() -> Result<()> {
+    let dir = tempfile::tempdir()?;
+    let distdir = dir.path().to_str().ok_or("invalid tempdir path")?;
 
     let input = format!("robots.txt {distdir} https://www.google.com\n");
 
@@ -91,17 +88,13 @@ fn fetch_https_http2() {
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .spawn()
-        .expect("failed to run mktool fetch");
+        .spawn()?;
 
-    child
-        .stdin
-        .take()
-        .expect("failed to open stdin")
-        .write_all(input.as_bytes())
-        .expect("failed to write to stdin");
+    let mut stdin = child.stdin.take().ok_or("failed to open stdin")?;
+    stdin.write_all(input.as_bytes())?;
+    drop(stdin);
 
-    let output = child.wait_with_output().expect("failed to wait on child");
+    let output = child.wait_with_output()?;
     let stderr = String::from_utf8_lossy(&output.stderr);
 
     assert!(output.status.success(), "fetch failed: {stderr}");
@@ -109,7 +102,8 @@ fn fetch_https_http2() {
         dir.path().join("robots.txt").exists(),
         "downloaded file not found"
     );
-    assert!(!has_temp_files(dir.path()), "temp file not cleaned up");
+    assert!(!has_temp_files(dir.path())?, "temp file not cleaned up");
+    Ok(())
 }
 
 /*
@@ -117,16 +111,15 @@ fn fetch_https_http2() {
  * Uses a subdirectory in the filepath to exercise create_dir_all().
  */
 #[test]
-fn fetch_ftp() {
-    let dir = tempfile::tempdir().expect("failed to create tempdir");
-    let distdir = dir.path().to_str().expect("invalid tempdir path");
+fn fetch_ftp() -> Result<()> {
+    let dir = tempfile::tempdir()?;
+    let distdir = dir.path().to_str().ok_or("invalid tempdir path")?;
 
     let input_file = dir.path().join("input");
     fs::write(
         &input_file,
         format!("sub/robots.txt {distdir} -ftp://ftp.netbsd.org/robots.txt\n"),
-    )
-    .expect("failed to write input file");
+    )?;
 
     let output = Command::new(MKTOOL)
         .args([
@@ -134,13 +127,12 @@ fn fetch_ftp() {
             "-d",
             distdir,
             "-I",
-            input_file.to_str().expect("invalid input path"),
+            input_file.to_str().ok_or("invalid input path")?,
         ])
         .env("MKTOOL_JOBS", "1")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .output()
-        .expect("failed to run mktool fetch");
+        .output()?;
 
     let stderr = String::from_utf8_lossy(&output.stderr);
 
@@ -149,7 +141,8 @@ fn fetch_ftp() {
         dir.path().join("sub").join("robots.txt").exists(),
         "downloaded file not found"
     );
-    assert!(!has_temp_files(dir.path()), "temp file not cleaned up");
+    assert!(!has_temp_files(dir.path())?, "temp file not cleaned up");
+    Ok(())
 }
 
 /*
@@ -157,16 +150,15 @@ fn fetch_ftp() {
  * partial or incorrect file is left behind.
  */
 #[test]
-fn fetch_https_bad_checksum() {
-    let dir = tempfile::tempdir().expect("failed to create tempdir");
-    let distdir = dir.path().to_str().expect("invalid tempdir path");
+fn fetch_https_bad_checksum() -> Result<()> {
+    let dir = tempfile::tempdir()?;
+    let distdir = dir.path().to_str().ok_or("invalid tempdir path")?;
 
     let distinfo = dir.path().join("distinfo");
     fs::write(
         &distinfo,
         "BLAKE2s (robots.txt) = 0000000000000000000000000000000000000000000000000000000000000000\n",
-    )
-    .expect("failed to write distinfo");
+    )?;
 
     let input =
         format!("robots.txt {distdir} -https://www.google.com/robots.txt\n");
@@ -177,7 +169,7 @@ fn fetch_https_bad_checksum() {
             "-d",
             distdir,
             "-f",
-            distinfo.to_str().expect("invalid distinfo path"),
+            distinfo.to_str().ok_or("invalid distinfo path")?,
             "-I",
             "-",
         ])
@@ -185,17 +177,13 @@ fn fetch_https_bad_checksum() {
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .spawn()
-        .expect("failed to run mktool fetch");
+        .spawn()?;
 
-    child
-        .stdin
-        .take()
-        .expect("failed to open stdin")
-        .write_all(input.as_bytes())
-        .expect("failed to write to stdin");
+    let mut stdin = child.stdin.take().ok_or("failed to open stdin")?;
+    stdin.write_all(input.as_bytes())?;
+    drop(stdin);
 
-    let output = child.wait_with_output().expect("failed to wait on child");
+    let output = child.wait_with_output()?;
     let stderr = String::from_utf8_lossy(&output.stderr);
 
     assert!(!output.status.success(), "fetch should have failed: {stderr}");
@@ -207,20 +195,20 @@ fn fetch_https_bad_checksum() {
         !dir.path().join("robots.txt").exists(),
         "failed file should have been cleaned up"
     );
-    assert!(!has_temp_files(dir.path()), "temp file not cleaned up");
+    assert!(!has_temp_files(dir.path())?, "temp file not cleaned up");
+    Ok(())
 }
 
 #[test]
-fn fetch_ftp_bad_checksum() {
-    let dir = tempfile::tempdir().expect("failed to create tempdir");
-    let distdir = dir.path().to_str().expect("invalid tempdir path");
+fn fetch_ftp_bad_checksum() -> Result<()> {
+    let dir = tempfile::tempdir()?;
+    let distdir = dir.path().to_str().ok_or("invalid tempdir path")?;
 
     let distinfo = dir.path().join("distinfo");
     fs::write(
         &distinfo,
         "BLAKE2s (robots.txt) = 0000000000000000000000000000000000000000000000000000000000000000\n",
-    )
-    .expect("failed to write distinfo");
+    )?;
 
     let input =
         format!("robots.txt {distdir} -ftp://ftp.netbsd.org/robots.txt\n");
@@ -231,7 +219,7 @@ fn fetch_ftp_bad_checksum() {
             "-d",
             distdir,
             "-f",
-            distinfo.to_str().expect("invalid distinfo path"),
+            distinfo.to_str().ok_or("invalid distinfo path")?,
             "-I",
             "-",
         ])
@@ -239,17 +227,13 @@ fn fetch_ftp_bad_checksum() {
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .spawn()
-        .expect("failed to run mktool fetch");
+        .spawn()?;
 
-    child
-        .stdin
-        .take()
-        .expect("failed to open stdin")
-        .write_all(input.as_bytes())
-        .expect("failed to write to stdin");
+    let mut stdin = child.stdin.take().ok_or("failed to open stdin")?;
+    stdin.write_all(input.as_bytes())?;
+    drop(stdin);
 
-    let output = child.wait_with_output().expect("failed to wait on child");
+    let output = child.wait_with_output()?;
     let stderr = String::from_utf8_lossy(&output.stderr);
 
     assert!(!output.status.success(), "fetch should have failed: {stderr}");
@@ -261,7 +245,8 @@ fn fetch_ftp_bad_checksum() {
         !dir.path().join("robots.txt").exists(),
         "failed file should have been cleaned up"
     );
-    assert!(!has_temp_files(dir.path()), "temp file not cleaned up");
+    assert!(!has_temp_files(dir.path())?, "temp file not cleaned up");
+    Ok(())
 }
 
 /*
@@ -270,12 +255,12 @@ fn fetch_ftp_bad_checksum() {
  * responds to any commands.
  */
 #[test]
-fn fetch_ftp_read_timeout() {
-    let port = free_port();
-    let mut nc = start_nc(port, "220 ready\\r\\n");
+fn fetch_ftp_read_timeout() -> Result<()> {
+    let port = free_port()?;
+    let mut nc = start_nc(port, "220 ready\\r\\n")?;
 
-    let dir = tempfile::tempdir().expect("failed to create tempdir");
-    let distdir = dir.path().to_str().expect("invalid tempdir path");
+    let dir = tempfile::tempdir()?;
+    let distdir = dir.path().to_str().ok_or("invalid tempdir path")?;
     let input =
         format!("test.txt {distdir} -ftp://127.0.0.1:{port}/test.txt\n");
 
@@ -288,17 +273,13 @@ fn fetch_ftp_read_timeout() {
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .spawn()
-        .expect("failed to run mktool fetch");
+        .spawn()?;
 
-    child
-        .stdin
-        .take()
-        .expect("failed to open stdin")
-        .write_all(input.as_bytes())
-        .expect("failed to write to stdin");
+    let mut stdin = child.stdin.take().ok_or("failed to open stdin")?;
+    stdin.write_all(input.as_bytes())?;
+    drop(stdin);
 
-    let output = child.wait_with_output().expect("failed to wait on child");
+    let output = child.wait_with_output()?;
     let elapsed = start.elapsed();
 
     let _ = nc.kill();
@@ -311,33 +292,30 @@ fn fetch_ftp_read_timeout() {
         elapsed.as_secs() < 30,
         "read timeout did not fire, took {elapsed:?}"
     );
-    assert!(!has_temp_files(dir.path()), "temp file not cleaned up");
+    assert!(!has_temp_files(dir.path())?, "temp file not cleaned up");
+    Ok(())
 }
 
 /*
  * Verify that invalid input (too few fields) is handled gracefully.
  */
 #[test]
-fn fetch_invalid_input() {
-    let dir = tempfile::tempdir().expect("failed to create tempdir");
-    let distdir = dir.path().to_str().expect("invalid tempdir path");
+fn fetch_invalid_input() -> Result<()> {
+    let dir = tempfile::tempdir()?;
+    let distdir = dir.path().to_str().ok_or("invalid tempdir path")?;
 
     let mut child = Command::new(MKTOOL)
         .args(["fetch", "-d", distdir, "-j", "1", "-I", "-"])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .spawn()
-        .expect("failed to run mktool fetch");
+        .spawn()?;
 
-    child
-        .stdin
-        .take()
-        .expect("failed to open stdin")
-        .write_all(b"onlyonefield\n")
-        .expect("failed to write to stdin");
+    let mut stdin = child.stdin.take().ok_or("failed to open stdin")?;
+    stdin.write_all(b"onlyonefield\n")?;
+    drop(stdin);
 
-    let output = child.wait_with_output().expect("failed to wait on child");
+    let output = child.wait_with_output()?;
     let stderr = String::from_utf8_lossy(&output.stderr);
 
     assert!(!output.status.success(), "fetch should have failed: {stderr}");
@@ -345,21 +323,22 @@ fn fetch_invalid_input() {
         stderr.contains("Invalid input"),
         "expected invalid input error: {stderr}"
     );
+    Ok(())
 }
 
 /*
  * Verify that an HTTP 404 response is handled gracefully.
  */
 #[test]
-fn fetch_http_404() {
-    let port = free_port();
+fn fetch_http_404() -> Result<()> {
+    let port = free_port()?;
     let mut nc = start_nc(
         port,
         "HTTP/1.1 404 Not Found\\r\\nContent-Length: 0\\r\\n\\r\\n",
-    );
+    )?;
 
-    let dir = tempfile::tempdir().expect("failed to create tempdir");
-    let distdir = dir.path().to_str().expect("invalid tempdir path");
+    let dir = tempfile::tempdir()?;
+    let distdir = dir.path().to_str().ok_or("invalid tempdir path")?;
     let input =
         format!("test.txt {distdir} -http://127.0.0.1:{port}/test.txt\n");
 
@@ -369,17 +348,13 @@ fn fetch_http_404() {
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .spawn()
-        .expect("failed to run mktool fetch");
+        .spawn()?;
 
-    child
-        .stdin
-        .take()
-        .expect("failed to open stdin")
-        .write_all(input.as_bytes())
-        .expect("failed to write to stdin");
+    let mut stdin = child.stdin.take().ok_or("failed to open stdin")?;
+    stdin.write_all(input.as_bytes())?;
+    drop(stdin);
 
-    let output = child.wait_with_output().expect("failed to wait on child");
+    let output = child.wait_with_output()?;
 
     let _ = nc.kill();
     let _ = nc.wait();
@@ -392,16 +367,17 @@ fn fetch_http_404() {
         !dir.path().join("test.txt").exists(),
         "no file should have been created"
     );
-    assert!(!has_temp_files(dir.path()), "temp file not cleaned up");
+    assert!(!has_temp_files(dir.path())?, "temp file not cleaned up");
+    Ok(())
 }
 
 /*
  * Verify that re-fetching an already-downloaded file is a no-op.
  */
 #[test]
-fn fetch_https_refetch() {
-    let dir = tempfile::tempdir().expect("failed to create tempdir");
-    let distdir = dir.path().to_str().expect("invalid tempdir path");
+fn fetch_https_refetch() -> Result<()> {
+    let dir = tempfile::tempdir()?;
+    let distdir = dir.path().to_str().ok_or("invalid tempdir path")?;
 
     let input =
         format!("robots.txt {distdir} -https://www.google.com/robots.txt\n");
@@ -413,17 +389,13 @@ fn fetch_https_refetch() {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
-            .spawn()
-            .expect("failed to run mktool fetch");
+            .spawn()?;
 
-        child
-            .stdin
-            .take()
-            .expect("failed to open stdin")
-            .write_all(input.as_bytes())
-            .expect("failed to write to stdin");
+        let mut stdin = child.stdin.take().ok_or("failed to open stdin")?;
+        stdin.write_all(input.as_bytes())?;
+        drop(stdin);
 
-        let output = child.wait_with_output().expect("failed to wait on child");
+        let output = child.wait_with_output()?;
         let stderr = String::from_utf8_lossy(&output.stderr);
 
         assert!(output.status.success(), "fetch failed: {stderr}");
@@ -433,7 +405,8 @@ fn fetch_https_refetch() {
         dir.path().join("robots.txt").exists(),
         "downloaded file not found"
     );
-    assert!(!has_temp_files(dir.path()), "temp file not cleaned up");
+    assert!(!has_temp_files(dir.path())?, "temp file not cleaned up");
+    Ok(())
 }
 
 /*
@@ -441,11 +414,11 @@ fn fetch_https_refetch() {
  * gracefully.
  */
 #[test]
-fn fetch_http_connect_error() {
-    let port = free_port();
+fn fetch_http_connect_error() -> Result<()> {
+    let port = free_port()?;
 
-    let dir = tempfile::tempdir().expect("failed to create tempdir");
-    let distdir = dir.path().to_str().expect("invalid tempdir path");
+    let dir = tempfile::tempdir()?;
+    let distdir = dir.path().to_str().ok_or("invalid tempdir path")?;
     let input =
         format!("test.txt {distdir} -http://127.0.0.1:{port}/test.txt\n");
 
@@ -455,17 +428,13 @@ fn fetch_http_connect_error() {
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .spawn()
-        .expect("failed to run mktool fetch");
+        .spawn()?;
 
-    child
-        .stdin
-        .take()
-        .expect("failed to open stdin")
-        .write_all(input.as_bytes())
-        .expect("failed to write to stdin");
+    let mut stdin = child.stdin.take().ok_or("failed to open stdin")?;
+    stdin.write_all(input.as_bytes())?;
+    drop(stdin);
 
-    let output = child.wait_with_output().expect("failed to wait on child");
+    let output = child.wait_with_output()?;
     let stderr = String::from_utf8_lossy(&output.stderr);
 
     assert!(!output.status.success(), "fetch should have failed: {stderr}");
@@ -477,5 +446,6 @@ fn fetch_http_connect_error() {
         !dir.path().join("test.txt").exists(),
         "no file should have been created"
     );
-    assert!(!has_temp_files(dir.path()), "temp file not cleaned up");
+    assert!(!has_temp_files(dir.path())?, "temp file not cleaned up");
+    Ok(())
 }
