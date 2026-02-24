@@ -42,6 +42,7 @@ pub struct DigestCmd {
 struct DigestResult {
     path: PathBuf,
     hash: Option<String>,
+    error: String,
 }
 
 impl DigestCmd {
@@ -68,7 +69,15 @@ impl DigestCmd {
         let nthreads = match self.jobs {
             Some(n) => n,
             None => match env::var("MKTOOL_JOBS") {
-                Ok(n) => n.parse::<usize>().unwrap_or(MKTOOL_DEFAULT_THREADS),
+                Ok(n) => match n.parse::<usize>() {
+                    Ok(n) => n,
+                    Err(e) => {
+                        eprintln!(
+                            "WARNING: invalid MKTOOL_JOBS '{n}': {e}, using default"
+                        );
+                        MKTOOL_DEFAULT_THREADS
+                    }
+                },
                 Err(_) => MKTOOL_DEFAULT_THREADS,
             },
         };
@@ -83,12 +92,20 @@ impl DigestCmd {
          */
         let mut hashfiles: Vec<DigestResult> = files
             .iter()
-            .map(|f| DigestResult { path: f.to_path_buf(), hash: None })
+            .map(|f| DigestResult {
+                path: f.to_path_buf(),
+                hash: None,
+                error: String::new(),
+            })
             .collect();
 
         hashfiles.par_iter_mut().for_each(|file| {
-            if let Ok(mut f) = fs::File::open(&file.path) {
-                file.hash = algorithm.hash_file(&mut f).ok();
+            match fs::File::open(&file.path) {
+                Ok(mut f) => match algorithm.hash_file(&mut f) {
+                    Ok(h) => file.hash = Some(h),
+                    Err(e) => file.error = e.to_string(),
+                },
+                Err(e) => file.error = e.to_string(),
             }
         });
 
@@ -102,7 +119,7 @@ impl DigestCmd {
             if let Some(hash) = file.hash {
                 println!("{} ({}) = {}", algorithm, file.path.display(), hash);
             } else {
-                eprintln!("{}", file.path.display());
+                eprintln!("{}: {}", file.path.display(), file.error);
                 rv = 1;
             }
         }
