@@ -357,6 +357,11 @@ fn fetch_and_verify(
         progress.println(format!("{:>12} {}", "Fetching", &file.filename));
     }
 
+    if file.sites.is_empty() {
+        eprintln!("No fetch sites available for {}", &file.filename);
+        return Err(FetchError::NotFound);
+    }
+
     'nextsite: for site in &file.sites {
         let url = url_from_site(site, &file.filename);
         let parseurl = Url::parse(&url)?;
