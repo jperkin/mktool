@@ -45,8 +45,19 @@ fn start_nc(port: u16, initial_response: &str) -> Child {
         .stderr(Stdio::null())
         .spawn()
         .expect("failed to start nc");
-    thread::sleep(Duration::from_millis(200));
+    wait_for_port(port);
     child
+}
+
+fn wait_for_port(port: u16) {
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while Instant::now() < deadline {
+        if TcpListener::bind(("127.0.0.1", port)).is_err() {
+            return;
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+    panic!("nc did not start listening on port {port} in time");
 }
 
 fn has_temp_files(dir: &Path) -> bool {
