@@ -412,8 +412,9 @@ impl CheckShlibs {
         for line in io::stdin().lock().lines() {
             let line = line?;
             let path = Path::new(&line);
-            if let Ok(dso) = fs::read(path) {
-                self.check_dso(path, &dso, &mut state)?;
+            match fs::read(path) {
+                Ok(dso) => self.check_dso(path, &dso, &mut state)?,
+                Err(e) => eprintln!("{}: {e}", path.display()),
             }
         }
 
