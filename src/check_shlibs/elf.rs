@@ -25,10 +25,10 @@ impl CheckShlibs {
         path: &Path,
         object: &[u8],
         state: &mut CheckState,
-    ) {
+    ) -> anyhow::Result<()> {
         let elf = match Elf::parse(object) {
             Ok(o) => o,
-            Err(_) => return,
+            Err(_) => return Ok(()),
         };
 
         let mut rpaths: Vec<String> = vec![];
@@ -99,7 +99,7 @@ impl CheckShlibs {
                 };
                 if exists {
                     check_shlib(path, &libpath, state);
-                    check_pkg(path, &libpath, state);
+                    check_pkg(path, &libpath, state)?;
                     continue 'nextlib;
                 }
             }
@@ -130,5 +130,6 @@ impl CheckShlibs {
              */
             println!("{}: missing library: {}", path.display(), lib);
         }
+        Ok(())
     }
 }

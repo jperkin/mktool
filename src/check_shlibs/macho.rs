@@ -25,10 +25,10 @@ impl CheckShlibs {
         path: &Path,
         object: &[u8],
         state: &mut CheckState,
-    ) {
+    ) -> anyhow::Result<()> {
         let pobj = match Mach::parse(object) {
             Ok(o) => o,
-            Err(_) => return,
+            Err(_) => return Ok(()),
         };
         let obj = match pobj {
             /*
@@ -40,7 +40,7 @@ impl CheckShlibs {
                 if let Ok(SingleArch::MachO(o)) = fat.get(0) {
                     o
                 } else {
-                    return;
+                    return Ok(());
                 }
             }
             Mach::Binary(bin) => bin,
@@ -99,7 +99,7 @@ impl CheckShlibs {
             };
             if exists {
                 check_shlib(path, libpath, state);
-                check_pkg(path, libpath, state);
+                check_pkg(path, libpath, state)?;
                 continue;
             }
 
@@ -108,5 +108,6 @@ impl CheckShlibs {
              */
             println!("{}: missing library: {}", path.display(), lib);
         }
+        Ok(())
     }
 }

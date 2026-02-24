@@ -19,6 +19,7 @@ mod elf;
 #[cfg(target_os = "macos")]
 mod macho;
 
+use anyhow::Context;
 use clap::Args;
 use regex::Regex;
 use std::collections::HashMap;
@@ -94,7 +95,11 @@ pub struct CheckState {
  * See if this library path belongs to a package.  If it does, ensure
  * that the package is a runtime dependency.
  */
-fn check_pkg<P1, P2>(obj: P1, lib: P2, state: &mut CheckState) -> bool
+fn check_pkg<P1, P2>(
+    obj: P1,
+    lib: P2,
+    state: &mut CheckState,
+) -> anyhow::Result<bool>
 where
     P1: AsRef<Path>,
     P2: AsRef<Path>,
@@ -107,7 +112,9 @@ where
             .args(&state.pkg_admin_args)
             .arg("dump")
             .output()
-            .expect("Unable to execute pkg_admin");
+            .with_context(|| {
+                format!("unable to execute {}", state.pkg_admin_cmd.display())
+            })?;
 
         if let Some(0) = cmd.status.code() {
             /*
@@ -160,11 +167,11 @@ where
     let pkgname = if let Some(entry) = state.pkgdb.get(lib.as_ref()) {
         match entry {
             Some(p) => p.to_string(),
-            None => return true,
+            None => return Ok(true),
         }
     } else {
         state.pkgdb.insert(lib.as_ref().to_path_buf(), None);
-        return true;
+        return Ok(true);
     };
 
     /*
@@ -180,7 +187,7 @@ where
         if dep.2 == pkgname {
             found = true;
             if dep.0 == "full" || dep.0 == "indirect-full" {
-                return true;
+                return Ok(true);
             }
         }
     }
@@ -196,7 +203,7 @@ where
             pkgname
         );
     }
-    false
+    Ok(false)
 }
 
 fn check_shlib<P1, P2>(obj: P1, lib: P2, state: &CheckState) -> bool
@@ -265,7 +272,7 @@ where
 }
 
 impl CheckShlibs {
-    pub fn run(&self) -> Result<i32, Box<dyn std::error::Error>> {
+    pub fn run(&self) -> anyhow::Result<i32> {
         /*
          * First verify that we have all the required environment variables
          * set, and perform initial configuration of them.
@@ -360,7 +367,9 @@ impl CheckShlibs {
                 let mut v = vec![];
                 let rgxs: Vec<_> = s.split_whitespace().collect();
                 for r in rgxs {
-                    let rgx = Regex::new(r).unwrap();
+                    let rgx = Regex::new(r).with_context(|| {
+                        format!("invalid CHECK_SHLIBS_TOXIC regex: {r}")
+                    })?;
                     v.push(rgx);
                 }
                 v
@@ -404,7 +413,7 @@ impl CheckShlibs {
             let line = line?;
             let path = Path::new(&line);
             if let Ok(dso) = fs::read(path) {
-                self.check_dso(path, &dso, &mut state);
+                self.check_dso(path, &dso, &mut state)?;
             }
         }
 

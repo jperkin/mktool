@@ -77,6 +77,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "anyhow"
+version = "1.0.102"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
+
+[[package]]
 name = "ar"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1088,6 +1094,7 @@ dependencies = [
 name = "mktool"
 version = "1.5.5"
 dependencies = [
+ "anyhow",
  "clap",
  "content_inspector",
  "elf",
