@@ -194,7 +194,12 @@ impl Fetch {
         let client = build_client()?;
 
         files.par_iter_mut().for_each(|file| {
-            if fetch_and_verify(&client, file, &distinfo, &progress).is_err() {
+            if let Err(e) =
+                fetch_and_verify(&client, file, &distinfo, &progress)
+            {
+                progress.suspend(|| {
+                    eprintln!("Failed to fetch {}: {e}", &file.filename);
+                });
                 file.status = false;
             }
         });
