@@ -232,7 +232,10 @@ impl Fetch {
                 fetch_and_verify(&client, file, &distinfo, &progress)
             {
                 progress.suspend(|| {
-                    eprintln!("Failed to fetch {}: {e}", &file.filename);
+                    eprintln!(
+                        "Failed to fetch {}: {e}",
+                        file.distdir.join(&file.filepath).display(),
+                    );
                 });
                 file.status = false;
             }
