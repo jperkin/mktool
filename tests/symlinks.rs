@@ -22,26 +22,25 @@ use std::process::{Command, Stdio};
 
 const MKTOOL: &str = env!("CARGO_BIN_EXE_mktool");
 
+type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
+
 /*
  * Simple dst1 -> src1
  */
 #[test]
-fn test_symlink_simple() {
+fn test_symlink_simple() -> Result<()> {
     let tmpdir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"));
     let mut cmd = Command::new(MKTOOL)
         .arg("symlinks")
         .current_dir(&tmpdir)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .spawn()
-        .unwrap_or_else(|_| panic!("unable to spawn {}", MKTOOL));
-    let mut stdin = cmd.stdin.take().expect("failed to open stdin");
+        .spawn()?;
+    let mut stdin = cmd.stdin.take().ok_or("failed to open stdin")?;
     std::thread::spawn(move || {
-        stdin
-            .write_all("dst1 -> src1\n".as_bytes())
-            .expect("failed to write to stdin");
+        let _ = stdin.write_all("dst1 -> src1\n".as_bytes());
     });
-    let out = cmd.wait_with_output().expect("failed to wait on child");
+    let out = cmd.wait_with_output()?;
 
     assert_eq!(out.status.code(), Some(0));
     assert_eq!(out.stdout, "".as_bytes());
@@ -49,28 +48,26 @@ fn test_symlink_simple() {
     assert!(tmpdir.clone().join("dst1").is_symlink());
     assert!(!tmpdir.clone().join("dst1").exists());
     assert!(!tmpdir.clone().join("src1").exists());
+    Ok(())
 }
 
 /*
  * Recreating an existing symlink should work, ln -fs style.
  */
 #[test]
-fn test_symlink_overwrite() {
+fn test_symlink_overwrite() -> Result<()> {
     let tmpdir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"));
     let mut cmd = Command::new(MKTOOL)
         .arg("symlinks")
         .current_dir(&tmpdir)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .spawn()
-        .unwrap_or_else(|_| panic!("unable to spawn {}", MKTOOL));
-    let mut stdin = cmd.stdin.take().expect("failed to open stdin");
+        .spawn()?;
+    let mut stdin = cmd.stdin.take().ok_or("failed to open stdin")?;
     std::thread::spawn(move || {
-        stdin
-            .write_all("dst2 -> src2\ndst2 -> src2a\n".as_bytes())
-            .expect("failed to write to stdin");
+        let _ = stdin.write_all("dst2 -> src2\ndst2 -> src2a\n".as_bytes());
     });
-    let out = cmd.wait_with_output().expect("failed to wait on child");
+    let out = cmd.wait_with_output()?;
 
     assert_eq!(out.status.code(), Some(0));
     assert_eq!(out.stdout, "".as_bytes());
@@ -79,29 +76,27 @@ fn test_symlink_overwrite() {
     assert!(!tmpdir.clone().join("dst2").exists());
     assert!(!tmpdir.clone().join("src2").exists());
     assert!(!tmpdir.clone().join("src2a").exists());
+    Ok(())
 }
 
 /*
  * Require creating a directory tree first.
  */
 #[test]
-fn test_symlink_subdir() {
+fn test_symlink_subdir() -> Result<()> {
     let tmpdir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"));
     let mut cmd = Command::new(MKTOOL)
         .arg("symlinks")
         .current_dir(&tmpdir)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .spawn()
-        .unwrap_or_else(|_| panic!("unable to spawn {}", MKTOOL));
-    let mut stdin = cmd.stdin.take().expect("failed to open stdin");
+        .spawn()?;
+    let mut stdin = cmd.stdin.take().ok_or("failed to open stdin")?;
     std::thread::spawn(move || {
         // While here test that whitespace is trimmed.
-        stdin
-            .write_all(" dst3/a/b/c/f  ->  src3 \n".as_bytes())
-            .expect("failed to write to stdin");
+        let _ = stdin.write_all(" dst3/a/b/c/f  ->  src3 \n".as_bytes());
     });
-    let out = cmd.wait_with_output().expect("failed to wait on child");
+    let out = cmd.wait_with_output()?;
 
     assert_eq!(out.status.code(), Some(0));
     assert_eq!(out.stdout, "".as_bytes());
@@ -112,13 +107,14 @@ fn test_symlink_subdir() {
     assert!(tmpdir.clone().join("dst3/a/b/c").is_dir());
     assert!(tmpdir.clone().join("dst3/a/b/c/f").is_symlink());
     assert!(!tmpdir.clone().join("dst3/a/b/c/f").exists());
+    Ok(())
 }
 
 /*
  * Invalid lines are simply ignored.
  */
 #[test]
-fn test_symlink_invalid() {
+fn test_symlink_invalid() -> Result<()> {
     let mut tmpdir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"));
     /*
      * Create a temporary directory to run the tests in.  As no files or
@@ -126,31 +122,29 @@ fn test_symlink_invalid() {
      * at the end with no errors.
      */
     tmpdir.push("invalid");
-    fs::create_dir(&tmpdir).expect("unable to create directory");
+    fs::create_dir(&tmpdir)?;
     let mut cmd = Command::new(MKTOOL)
         .arg("symlinks")
         .current_dir(&tmpdir)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .spawn()
-        .unwrap_or_else(|_| panic!("unable to spawn {}", MKTOOL));
-    let mut stdin = cmd.stdin.take().expect("failed to open stdin");
+        .spawn()?;
+    let mut stdin = cmd.stdin.take().ok_or("failed to open stdin")?;
     std::thread::spawn(move || {
-        stdin
-            .write_all(
-                format!(
-                    "{}\n{}\n{}\n\n",
-                    "one/two -> three -> four", "one", "one two"
-                )
-                .as_bytes(),
+        let _ = stdin.write_all(
+            format!(
+                "{}\n{}\n{}\n\n",
+                "one/two -> three -> four", "one", "one two"
             )
-            .expect("failed to write to stdin");
+            .as_bytes(),
+        );
     });
-    let out = cmd.wait_with_output().expect("failed to wait on child");
+    let out = cmd.wait_with_output()?;
 
     assert_eq!(out.status.code(), Some(0));
     assert_eq!(out.stdout, "".as_bytes());
     assert_eq!(out.stderr, "".as_bytes());
 
-    fs::remove_dir(&tmpdir).expect("unable to remove directory");
+    fs::remove_dir(&tmpdir)?;
+    Ok(())
 }
