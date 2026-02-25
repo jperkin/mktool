@@ -22,27 +22,27 @@ use std::process::{Command, Stdio};
 
 const MKTOOL: &str = env!("CARGO_BIN_EXE_mktool");
 
+type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
+
 /*
  * With no files it should just print an empty $NetBSD$ header and a
  * blank line, but exit 1.
  */
 #[test]
-fn test_distinfo_no_args() {
+fn test_distinfo_no_args() -> Result<()> {
     let output = String::from("$NetBSD$\n\n");
-    let cmd = Command::new(MKTOOL)
-        .arg("distinfo")
-        .output()
-        .unwrap_or_else(|_| panic!("unable to spawn {}", MKTOOL));
+    let cmd = Command::new(MKTOOL).arg("distinfo").output()?;
     assert_eq!(cmd.status.code(), Some(1));
     assert_eq!(cmd.stdout, output.as_bytes());
     assert_eq!(cmd.stderr, "".as_bytes());
+    Ok(())
 }
 
 /*
  * With a valid distinfo but no files it should print nothing.
  */
 #[test]
-fn test_distinfo_just_distinfo() {
+fn test_distinfo_just_distinfo() -> Result<()> {
     let mut distinfo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     distinfo.push("tests/data/distinfo");
 
@@ -51,40 +51,40 @@ fn test_distinfo_just_distinfo() {
         .arg("-f")
         .arg("distinfo")
         .current_dir("tests/data")
-        .output()
-        .unwrap_or_else(|_| panic!("unable to spawn {}", MKTOOL));
+        .output()?;
     assert_eq!(cmd.status.code(), Some(1));
     assert_eq!(cmd.stdout, "".as_bytes());
     assert_eq!(cmd.stderr, "".as_bytes());
+    Ok(())
 }
 
 /*
  * Invalid distdir / distinfo.
  */
 #[test]
-fn test_distinfo_invalid_distdir() {
+fn test_distinfo_invalid_distdir() -> Result<()> {
     let cmd = Command::new(MKTOOL)
         .arg("distinfo")
         .arg("-d")
         .arg("/nonexistent")
-        .output()
-        .unwrap_or_else(|_| panic!("unable to spawn {}", MKTOOL));
+        .output()?;
     assert_eq!(cmd.status.code(), Some(128));
     assert_eq!(cmd.stdout, "".as_bytes());
     assert!(cmd.stderr.starts_with(b"ERROR: Supplied DISTDIR"));
+    Ok(())
 }
 
 #[test]
-fn test_distinfo_invalid_distinfo() {
+fn test_distinfo_invalid_distinfo() -> Result<()> {
     let cmd = Command::new(MKTOOL)
         .arg("distinfo")
         .arg("-f")
         .arg("/nonexistent")
-        .output()
-        .unwrap_or_else(|_| panic!("unable to spawn {}", MKTOOL));
+        .output()?;
     assert_eq!(cmd.status.code(), Some(128));
     assert_eq!(cmd.stdout, "".as_bytes());
     assert!(cmd.stderr.starts_with(b"ERROR: Could not open distinfo"));
+    Ok(())
 }
 
 /*
@@ -92,7 +92,7 @@ fn test_distinfo_invalid_distinfo() {
  * existing patch entries).
  */
 #[test]
-fn test_distinfo_single_file_no_checksum() {
+fn test_distinfo_single_file_no_checksum() -> Result<()> {
     let output = format!(
         "{}\n\n{}\n{}\n",
         "$NetBSD: distinfo,v 1.1 1970/01/01 00:00:00 ken Exp $",
@@ -109,8 +109,7 @@ fn test_distinfo_single_file_no_checksum() {
         .arg("-c")
         .arg("digest1.txt")
         .current_dir("tests/data")
-        .output()
-        .unwrap_or_else(|_| panic!("unable to spawn {}", MKTOOL));
+        .output()?;
     assert_eq!(cmd.status.code(), Some(1));
     assert_eq!(cmd.stdout, output.as_bytes());
     assert_eq!(cmd.stderr, "".as_bytes());
@@ -129,11 +128,11 @@ fn test_distinfo_single_file_no_checksum() {
         .arg("-c")
         .arg("does-not-exist.txt")
         .current_dir("tests/data")
-        .output()
-        .unwrap_or_else(|_| panic!("unable to spawn {}", MKTOOL));
+        .output()?;
     assert_eq!(cmd.status.code(), Some(1));
     assert_eq!(cmd.stdout, output.as_bytes());
     assert_eq!(cmd.stderr, "".as_bytes());
+    Ok(())
 }
 
 /*
@@ -143,7 +142,7 @@ fn test_distinfo_single_file_no_checksum() {
  * identical, the entire distinfo should be printed with exit 0.
  */
 #[test]
-fn test_distinfo_single_patch_no_distinfo() {
+fn test_distinfo_single_patch_no_distinfo() -> Result<()> {
     let output = format!(
         "{}\n\n{}\n",
         "$NetBSD$",
@@ -156,18 +155,18 @@ fn test_distinfo_single_patch_no_distinfo() {
         .arg("SHA1")
         .arg("patch-Makefile")
         .current_dir("tests/data")
-        .output()
-        .unwrap_or_else(|_| panic!("unable to spawn {}", MKTOOL));
+        .output()?;
     assert_eq!(cmd.status.code(), Some(1));
     assert_eq!(cmd.stdout, output.as_bytes());
     assert_eq!(cmd.stderr, "".as_bytes());
+    Ok(())
 }
 
 #[test]
-fn test_distinfo_single_patch_with_distinfo() {
+fn test_distinfo_single_patch_with_distinfo() -> Result<()> {
     let mut distinfo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     distinfo.push("tests/data/distinfo");
-    let diout = fs::read(distinfo).expect("unable to read distinfo");
+    let diout = fs::read(distinfo)?;
     let cmd = Command::new(MKTOOL)
         .arg("distinfo")
         .arg("-f")
@@ -176,11 +175,11 @@ fn test_distinfo_single_patch_with_distinfo() {
         .arg("SHA1")
         .arg("patch-Makefile")
         .current_dir("tests/data")
-        .output()
-        .unwrap_or_else(|_| panic!("unable to spawn {}", MKTOOL));
+        .output()?;
     assert_eq!(cmd.status.code(), Some(0));
     assert_eq!(cmd.stdout, diout);
     assert_eq!(cmd.stderr, "".as_bytes());
+    Ok(())
 }
 
 /*
@@ -189,10 +188,10 @@ fn test_distinfo_single_patch_with_distinfo() {
  * '/path/to/patches/patch-*' globs which result in nothing.
  */
 #[test]
-fn test_distinfo_patchmode_no_patches() {
+fn test_distinfo_patchmode_no_patches() -> Result<()> {
     let mut distinfo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     distinfo.push("tests/data/distinfo.dists");
-    let diout = fs::read(distinfo).expect("unable to read distinfo");
+    let diout = fs::read(distinfo)?;
     let cmd = Command::new(MKTOOL)
         .arg("distinfo")
         .arg("-f")
@@ -201,11 +200,11 @@ fn test_distinfo_patchmode_no_patches() {
         .arg("SHA1")
         .arg("patch-non-existent")
         .current_dir("tests/data")
-        .output()
-        .unwrap_or_else(|_| panic!("unable to spawn {}", MKTOOL));
+        .output()?;
     assert_eq!(cmd.status.code(), Some(0));
     assert_eq!(cmd.stdout, diout);
     assert_eq!(cmd.stderr, "".as_bytes());
+    Ok(())
 }
 
 /*
@@ -213,7 +212,7 @@ fn test_distinfo_patchmode_no_patches() {
  * exit 0, without should just print distfiles and exit 1.
  */
 #[test]
-fn test_distinfo_distfiles_no_distinfo() {
+fn test_distinfo_distfiles_no_distinfo() -> Result<()> {
     let mut distinfo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     distinfo.push("tests/data/distinfo");
     let output = format!(
@@ -238,18 +237,18 @@ fn test_distinfo_distfiles_no_distinfo() {
         .arg("-c")
         .arg("digest2.txt")
         .current_dir("tests/data")
-        .output()
-        .unwrap_or_else(|_| panic!("unable to spawn {}", MKTOOL));
+        .output()?;
     assert_eq!(cmd.status.code(), Some(1));
     assert_eq!(cmd.stdout, output.as_bytes());
     assert_eq!(cmd.stderr, "".as_bytes());
+    Ok(())
 }
 
 #[test]
-fn test_distinfo_distfiles_with_distinfo() {
+fn test_distinfo_distfiles_with_distinfo() -> Result<()> {
     let mut distinfo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     distinfo.push("tests/data/distinfo");
-    let diout = fs::read(distinfo).expect("unable to read distinfo");
+    let diout = fs::read(distinfo)?;
 
     let cmd = Command::new(MKTOOL)
         .arg("distinfo")
@@ -264,18 +263,18 @@ fn test_distinfo_distfiles_with_distinfo() {
         .arg("-f")
         .arg("distinfo")
         .current_dir("tests/data")
-        .output()
-        .unwrap_or_else(|_| panic!("unable to spawn {}", MKTOOL));
+        .output()?;
     assert_eq!(cmd.status.code(), Some(0));
     assert_eq!(cmd.stdout, diout);
     assert_eq!(cmd.stderr, "".as_bytes());
+    Ok(())
 }
 
 /*
  * Digest algorithms should be output in command line order.
  */
 #[test]
-fn test_distinfo_algorithm_order() {
+fn test_distinfo_algorithm_order() -> Result<()> {
     let cmd = Command::new(MKTOOL)
         .arg("distinfo")
         .arg("-a")
@@ -290,31 +289,30 @@ fn test_distinfo_algorithm_order() {
         .arg("SHA1")
         .arg("patch-Makefile")
         .current_dir("tests/data")
-        .output()
-        .unwrap_or_else(|_| panic!("unable to spawn {}", MKTOOL));
+        .output()?;
     let mut outlines = cmd.stdout.split(|c| *c == b'\n');
     assert_eq!(cmd.status.code(), Some(1));
     // Remember that .nth() consumes previous entries...
-    assert!(outlines.next().unwrap().starts_with(b"$NetBSD"));
-    assert!(outlines.nth(1).unwrap().starts_with(b"SHA512"));
-    assert!(outlines.next().unwrap().starts_with(b"BLAKE2s"));
-    assert!(outlines.nth(1).unwrap().starts_with(b"RMD160"));
-    assert!(outlines.next().unwrap().starts_with(b"SHA1"));
+    assert!(outlines.next().ok_or("missing line")?.starts_with(b"$NetBSD"));
+    assert!(outlines.nth(1).ok_or("missing line")?.starts_with(b"SHA512"));
+    assert!(outlines.next().ok_or("missing line")?.starts_with(b"BLAKE2s"));
+    assert!(outlines.nth(1).ok_or("missing line")?.starts_with(b"RMD160"));
+    assert!(outlines.next().ok_or("missing line")?.starts_with(b"SHA1"));
     assert_eq!(cmd.stderr, "".as_bytes());
+    Ok(())
 }
 
 /*
  * Test input from file / stdin.
  */
 #[test]
-fn test_distinfo_input_file() {
+fn test_distinfo_input_file() -> Result<()> {
     let mut distinfo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     distinfo.push("tests/data/distinfo");
-    let diout = fs::read(distinfo).expect("unable to read distinfo");
+    let diout = fs::read(distinfo)?;
     let tmpdir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"));
     let tmpfile = tmpdir.join("test_distinfo_input_file.txt");
-    fs::write(&tmpfile, "digest2.txt\ndigest1.txt\n")
-        .expect("unable to write temp file");
+    fs::write(&tmpfile, "digest2.txt\ndigest1.txt\n")?;
 
     let cmd = Command::new(MKTOOL)
         .arg("distinfo")
@@ -327,19 +325,19 @@ fn test_distinfo_input_file() {
         .arg("-f")
         .arg("distinfo")
         .current_dir("tests/data")
-        .output()
-        .unwrap_or_else(|_| panic!("unable to spawn {}", MKTOOL));
-    fs::remove_file(&tmpfile).expect("unable to remove temp file");
+        .output()?;
+    fs::remove_file(&tmpfile)?;
     assert_eq!(cmd.status.code(), Some(0));
     assert_eq!(cmd.stdout, diout);
     assert_eq!(cmd.stderr, "".as_bytes());
+    Ok(())
 }
 
 #[test]
-fn test_distinfo_input_stdin() {
+fn test_distinfo_input_stdin() -> Result<()> {
     let mut distinfo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     distinfo.push("tests/data/distinfo");
-    let diout = fs::read(distinfo).expect("unable to read distinfo");
+    let diout = fs::read(distinfo)?;
 
     let mut cmd = Command::new(MKTOOL)
         .arg("distinfo")
@@ -354,19 +352,17 @@ fn test_distinfo_input_stdin() {
         .current_dir("tests/data")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .spawn()
-        .unwrap_or_else(|_| panic!("unable to spawn {}", MKTOOL));
-    let mut stdin = cmd.stdin.take().expect("failed to open stdin");
+        .spawn()?;
+    let mut stdin = cmd.stdin.take().ok_or("failed to open stdin")?;
     std::thread::spawn(move || {
-        stdin
-            .write_all("digest1.txt\ndigest2.txt\n".as_bytes())
-            .expect("failed to write to stdin");
+        let _ = stdin.write_all("digest1.txt\ndigest2.txt\n".as_bytes());
     });
-    let out = cmd.wait_with_output().expect("failed to wait on child");
+    let out = cmd.wait_with_output()?;
 
     assert_eq!(out.status.code(), Some(0));
     assert_eq!(out.stdout, diout);
     assert_eq!(out.stderr, "".as_bytes());
+    Ok(())
 }
 
 /*
@@ -374,10 +370,10 @@ fn test_distinfo_input_stdin() {
  * and so the exit status should be 0.
  */
 #[test]
-fn test_distinfo_full() {
+fn test_distinfo_full() -> Result<()> {
     let mut distinfo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     distinfo.push("tests/data/distinfo");
-    let diout = fs::read(distinfo).expect("unable to read distinfo");
+    let diout = fs::read(distinfo)?;
 
     let cmd = Command::new(MKTOOL)
         .arg("distinfo")
@@ -395,9 +391,9 @@ fn test_distinfo_full() {
         .arg("SHA1")
         .arg("patch-Makefile")
         .current_dir("tests/data")
-        .output()
-        .unwrap_or_else(|_| panic!("unable to spawn {}", MKTOOL));
+        .output()?;
     assert_eq!(cmd.status.code(), Some(0));
     assert_eq!(cmd.stdout, diout);
     assert_eq!(cmd.stderr, "".as_bytes());
+    Ok(())
 }
