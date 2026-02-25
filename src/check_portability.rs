@@ -131,8 +131,13 @@ impl Cmd {
         let mut skipglob = vec![];
         if let Ok(paths) = std::env::var("CHECK_PORTABILITY_SKIP") {
             for p in paths.split_whitespace().collect::<Vec<&str>>() {
-                if let Ok(g) = glob::Pattern::new(p) {
-                    skipglob.push(g);
+                match glob::Pattern::new(p) {
+                    Ok(g) => skipglob.push(g),
+                    Err(e) => {
+                        eprintln!(
+                            "WARNING: invalid CHECK_PORTABILITY_SKIP glob '{p}': {e}"
+                        );
+                    }
                 }
             }
         }
