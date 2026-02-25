@@ -92,7 +92,15 @@ impl CTFConvert {
         let nthreads = match self.jobs {
             Some(n) => n,
             None => match env::var("MKTOOL_JOBS") {
-                Ok(n) => n.parse::<usize>().unwrap_or(MKTOOL_DEFAULT_THREADS),
+                Ok(n) => match n.parse::<usize>() {
+                    Ok(n) => n,
+                    Err(e) => {
+                        eprintln!(
+                            "WARNING: invalid MKTOOL_JOBS '{n}': {e}, using default"
+                        );
+                        MKTOOL_DEFAULT_THREADS
+                    }
+                },
                 Err(_) => MKTOOL_DEFAULT_THREADS,
             },
         };
