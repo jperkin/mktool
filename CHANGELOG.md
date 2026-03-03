@@ -1,3 +1,13 @@
+## Version 1.5.6 (2026-03-03)
+
+* fetch: Fix IPv6 ftp connections that require EPSV mode.
+
+* fetch: Try all resolved addresses before moving to the next site.
+
+* Improve error handling, warnings, and tests.
+
+* Note that `FETCH_USING=mktool` is no longer required.
+
 ## Version 1.5.5 (2026-01-30)
 
 * fetch: Support connect timeouts for both HTTP and FTP, and read timeouts
