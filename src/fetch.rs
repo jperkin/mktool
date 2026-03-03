@@ -31,7 +31,7 @@ use std::process;
 use std::sync::LazyLock;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
-use suppaftp::{FtpStream, types::FileType};
+use suppaftp::{FtpStream, types::FileType, types::Mode};
 use thiserror::Error;
 use url::Url;
 
@@ -306,12 +306,12 @@ fn fetch_ftp(
         return Err(FetchError::NotFound);
     }
     let mut last_err = None;
-    let stream = addrs
+    let (stream, addr) = addrs
         .into_iter()
         .find_map(|addr| {
             match std::net::TcpStream::connect_timeout(&addr, *CONNECT_TIMEOUT)
             {
-                Ok(s) => Some(s),
+                Ok(s) => Some((s, addr)),
                 Err(e) => {
                     last_err = Some(e);
                     None
@@ -330,6 +330,9 @@ fn fetch_ftp(
         .set_write_timeout(Some(*READ_TIMEOUT))
         .map_err(suppaftp::FtpError::ConnectionError)?;
     let mut ftp = FtpStream::connect_with_stream(stream)?;
+    if addr.is_ipv6() {
+        ftp.set_mode(Mode::ExtendedPassive);
+    }
     ftp.login("anonymous", "anonymous")?;
     ftp.transfer_type(FileType::Binary)?;
     let mut ftpfile = ftp.retr_as_stream(path)?;
