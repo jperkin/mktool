@@ -301,10 +301,28 @@ fn fetch_ftp(
     let host = url.host_str().ok_or(FetchError::NotFound)?;
     let path = url.path();
     let port = url.port().unwrap_or(21);
-    let addr =
-        (host, port).to_socket_addrs()?.next().ok_or(FetchError::NotFound)?;
-    let stream = std::net::TcpStream::connect_timeout(&addr, *CONNECT_TIMEOUT)
-        .map_err(suppaftp::FtpError::ConnectionError)?;
+    let addrs: Vec<_> = (host, port).to_socket_addrs()?.collect();
+    if addrs.is_empty() {
+        return Err(FetchError::NotFound);
+    }
+    let mut last_err = None;
+    let stream = addrs
+        .into_iter()
+        .find_map(|addr| {
+            match std::net::TcpStream::connect_timeout(&addr, *CONNECT_TIMEOUT)
+            {
+                Ok(s) => Some(s),
+                Err(e) => {
+                    last_err = Some(e);
+                    None
+                }
+            }
+        })
+        .ok_or_else(|| {
+            suppaftp::FtpError::ConnectionError(last_err.unwrap_or_else(|| {
+                io::Error::new(io::ErrorKind::NotFound, "no addresses resolved")
+            }))
+        })?;
     stream
         .set_read_timeout(Some(*READ_TIMEOUT))
         .map_err(suppaftp::FtpError::ConnectionError)?;
