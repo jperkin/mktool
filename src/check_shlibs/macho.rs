@@ -45,12 +45,7 @@ impl CheckShlibs {
             }
             Mach::Binary(bin) => bin,
         };
-        for (i, lib) in obj.libs.into_iter().enumerate() {
-            /* Always skip the first entry on macOS, "self" */
-            if i == 0 {
-                continue;
-            }
-
+        for lib in obj.libs.into_iter() {
             /*
              * Skip system libraries if requested on newer macOS.  Apple no
              * longer ship the actual file system entries (because lol) so any
