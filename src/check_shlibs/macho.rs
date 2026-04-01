@@ -45,7 +45,14 @@ impl CheckShlibs {
             }
             Mach::Binary(bin) => bin,
         };
-        for lib in obj.libs.into_iter() {
+        /*
+         * For shared libraries, libs[0] is the LC_ID_DYLIB install name
+         * which we want to verify.  For executables there is no LC_ID_DYLIB
+         * (obj.name is None) and goblin places a placeholder at libs[0]
+         * that should be skipped.
+         */
+        let skip = usize::from(obj.name.is_none());
+        for lib in obj.libs.into_iter().skip(skip) {
             /*
              * Skip system libraries if requested on newer macOS.  Apple no
              * longer ship the actual file system entries (because lol) so any
