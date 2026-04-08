@@ -1,3 +1,7 @@
+## Version 1.5.7 (2026-04-08)
+
+* check-shlibs: Fix issue causing macOS libraries to erroneously pass.
+
 ## Version 1.5.6 (2026-03-03)
 
 * fetch: Fix IPv6 ftp connections that require EPSV mode.
