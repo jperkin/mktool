@@ -265,7 +265,10 @@ impl Cmd {
              * Remove leading "./" from walkdir path entries as all
              * CHECK_PORTABILITY_SKIP matches are relative to WRKDIR.
              */
-            let mpath = path.strip_prefix("./").unwrap();
+            let mpath = match path.strip_prefix("./") {
+                Ok(p) => p,
+                Err(_) => path,
+            };
             for g in &skipglob {
                 if g.matches_path(mpath) {
                     continue 'nextfile;
