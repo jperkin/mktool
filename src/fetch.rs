@@ -255,14 +255,18 @@ impl Fetch {
          * Only print the final message if we downloaded something and
          * everything was a success.
          */
-        if progress.length() > Some(0) && rv == 0 {
-            let dsize = progress.length().unwrap();
+        if rv == 0
+            && let Some(dsize) = progress.length()
+            && dsize > 0
+        {
             let dtime = started.elapsed();
+            /* Floor elapsed time at 1ms to avoid divide-by-zero on tiny fetches. */
+            let ms = dtime.as_millis().max(1) as u64;
             println!(
                 "Downloaded {} in {} ({}/s)",
                 HumanBytes(dsize),
                 HumanDuration(dtime),
-                HumanBytes(dsize / dtime.as_millis() as u64 * 1000)
+                HumanBytes(dsize * 1000 / ms)
             );
         }
 
