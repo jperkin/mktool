@@ -286,8 +286,9 @@ impl DistInfo {
         /*
          * Write resulting distinfo file to stdout.
          */
+        let new_bytes = di_new.as_bytes();
         let mut stdout = io::stdout().lock();
-        stdout.write_all(&di_new.as_bytes())?;
+        stdout.write_all(&new_bytes)?;
         stdout.flush()?;
 
         /*
@@ -297,7 +298,7 @@ impl DistInfo {
         if noinputfiles {
             Ok(1)
         } else {
-            Ok((di_cur.as_bytes() != di_new.as_bytes()) as i32)
+            Ok(i32::from(di_cur.as_bytes() != new_bytes))
         }
     }
 }
