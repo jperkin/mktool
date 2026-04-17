@@ -27,12 +27,14 @@ impl Symlinks {
     pub fn run(&self) -> Result<i32, Box<dyn std::error::Error>> {
         for line in io::stdin().lock().lines() {
             let line = line?;
-            let v: Vec<&str> = line.split(" -> ").collect();
-            if v.len() != 2 {
+            let Some((link, original)) = line.split_once(" -> ") else {
+                continue;
+            };
+            if original.contains(" -> ") {
                 continue;
             }
-            let link = PathBuf::from(v[0].trim());
-            let original = PathBuf::from(v[1].trim());
+            let link = PathBuf::from(link.trim());
+            let original = PathBuf::from(original.trim());
             /*
              * Create any parent directories required as part of the
              * target.
