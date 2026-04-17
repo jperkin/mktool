@@ -51,6 +51,17 @@ pub fn build_thread_pool(
     rayon::ThreadPoolBuilder::new().num_threads(nthreads).build()
 }
 
+/*
+ * Replace control bytes (other than tab) with '?' so that terminal escape
+ * sequences embedded in untrusted input cannot corrupt the user's terminal
+ * when we print them.
+ */
+pub fn scrub_ctrl(s: &str) -> String {
+    s.chars()
+        .map(|c| if c.is_control() && c != '\t' { '?' } else { c })
+        .collect()
+}
+
 use clap::{Parser, Subcommand};
 
 #[derive(Debug, Parser)]

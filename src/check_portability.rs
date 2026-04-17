@@ -16,6 +16,7 @@
 
 extern crate glob;
 
+use crate::scrub_ctrl;
 use clap::Args;
 use std::fs;
 use std::io::{BufRead, BufReader, Read};
@@ -325,7 +326,7 @@ impl Cmd {
                         "WARNING: [check-portability] {}:{}: {}",
                         mpath.display(),
                         i + 1,
-                        line
+                        scrub_ctrl(line)
                     );
                     print_random_warning();
                 }
@@ -337,7 +338,7 @@ impl Cmd {
                         "ERROR: [check-portability] {}:{}: {}",
                         mpath.display(),
                         i + 1,
-                        line
+                        scrub_ctrl(line)
                     );
                     print_test_eq_error();
                     rv = 1;
