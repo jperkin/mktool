@@ -17,7 +17,6 @@
 extern crate glob;
 
 use clap::Args;
-use content_inspector::{ContentType, inspect};
 use std::fs;
 use std::io::{BufRead, BufReader, Read};
 use walkdir::WalkDir;
@@ -141,64 +140,60 @@ impl Cmd {
          * than adding to skipglob as it's faster.  Based on the lists in
          * check-portability.sh but with some additions.
          */
-        let mut skipext: Vec<String> = vec![];
-        skipext.push(".orig".to_string());
-        skipext.push("~".to_string());
-        for ext in [
-            "1",
-            "3",
-            "C",
-            "a",
-            "ac",
-            "c",
-            "cc",
-            "css",
-            "cxx",
-            "docbook",
-            "dtd",
-            "el",
-            "f",
-            "gif",
-            "gn",
-            "go",
-            "gz",
-            "h",
-            "hpp",
-            "htm",
-            "html",
-            "hxx",
-            "idl",
-            "inc",
-            "jpg",
-            "js",
-            "json",
-            "kicad_mod",
-            "m4",
-            "map",
-            "md",
-            "mo",
-            "ogg",
-            "page",
-            "php",
-            "pl",
-            "png",
-            "po",
-            "properties",
-            "py",
-            "py",
-            "rb",
-            "result",
-            "svg",
-            "test",
-            "tfm",
-            "ts",
-            "txt",
-            "vf",
-            "xml",
-            "xpm",
-        ] {
-            skipext.push(format!(".{ext}"));
-        }
+        const SKIPEXT: &[&str] = &[
+            "~",
+            ".1",
+            ".3",
+            ".C",
+            ".a",
+            ".ac",
+            ".c",
+            ".cc",
+            ".css",
+            ".cxx",
+            ".docbook",
+            ".dtd",
+            ".el",
+            ".f",
+            ".gif",
+            ".gn",
+            ".go",
+            ".gz",
+            ".h",
+            ".hpp",
+            ".htm",
+            ".html",
+            ".hxx",
+            ".idl",
+            ".inc",
+            ".jpg",
+            ".js",
+            ".json",
+            ".kicad_mod",
+            ".m4",
+            ".map",
+            ".md",
+            ".mo",
+            ".ogg",
+            ".orig",
+            ".page",
+            ".php",
+            ".pl",
+            ".png",
+            ".po",
+            ".properties",
+            ".py",
+            ".rb",
+            ".result",
+            ".svg",
+            ".test",
+            ".tfm",
+            ".ts",
+            ".txt",
+            ".vf",
+            ".xml",
+            ".xpm",
+        ];
 
         /*
          * Get list of patched files.
@@ -241,7 +236,7 @@ impl Cmd {
              * Skip extensions we aren't interested in.
              */
             let fname: &str = &entry.file_name().to_string_lossy();
-            for ext in &skipext {
+            for ext in SKIPEXT {
                 if fname.ends_with(ext) {
                     continue 'nextfile;
                 }
@@ -276,23 +271,22 @@ impl Cmd {
             }
 
             /*
-             * Verify that the first 1KB of the file is valid UTF-8, and
-             * contains a valid shell hashbang, otherwise skip to avoid
-             * wasting time with binary files and non-shell files.
+             * Verify that the file starts with a shell hashbang, otherwise
+             * skip to avoid wasting time with non-shell files.
              *
              * XXX If CHECK_PORTABILITY_EXPERIMENTAL is enabled then we
              * should continue to check Makefiles (see shell version),
              * however that is not currently supported and may never be,
              * given I don't know anyone who enables it.
              */
-            let mut file = fs::File::open(path)?;
-            let mut buf = [0; 1024];
-            let n = file.read(&mut buf)?;
+            let file = fs::File::open(path)?;
+            let mut reader = BufReader::with_capacity(1024, file);
+            let head = reader.fill_buf()?;
 
             /*
              * Perform the simple and fast hashbang check first.
              */
-            if !buf.starts_with(b"#!") {
+            if !head.starts_with(b"#!") {
                 continue 'nextfile;
             }
 
@@ -301,63 +295,52 @@ impl Cmd {
              * next.
              */
             let binsh = b"/bin/sh";
-            let Some(newline) = buf[..n].iter().position(|&c| c == b'\n')
-            else {
+            let Some(newline) = head.iter().position(|&c| c == b'\n') else {
                 continue 'nextfile;
             };
-            let first = &buf[..newline];
+            let first = &head[..newline];
             if !first.windows(binsh.len()).any(|win| win == binsh) {
                 continue 'nextfile;
             }
 
-            if inspect(&buf[..n]) == ContentType::UTF_8 {
+            for (i, line) in reader.by_ref().lines().enumerate() {
                 /*
-                 * XXX: can we be more efficient and avoid re-reading the
-                 * first 1KB?
+                 * Silently skip any non-UTF-8 lines; the hashbang gate
+                 * already filters out binary files in practice.
                  */
-                let file = fs::File::open(path)?;
-                let reader = BufReader::new(file);
-                for (i, line) in reader.lines().enumerate() {
-                    /*
-                     * While the first 1KB may have been valid UTF-8 we
-                     * cannot vouch for the remainder of the file, so skip
-                     * any invalid lines.
-                     */
-                    if let Ok(line) = line {
-                        /*
-                         * Remove all leading and trailing whitespace to
-                         * simplify matches, and ignore comments.
-                         */
-                        let line = line.trim();
-                        if line.starts_with('#') {
-                            continue;
-                        }
-                        if check_random(line) {
-                            eprintln!(
-                                "WARNING: [check-portability] => Found $RANDOM:"
-                            );
-                            eprintln!(
-                                "WARNING: [check-portability] {}:{}: {}",
-                                mpath.display(),
-                                i + 1,
-                                line
-                            );
-                            print_random_warning();
-                        }
-                        if check_test_eq(line) {
-                            eprintln!(
-                                "ERROR: [check-portability] => Found test ... == ...:"
-                            );
-                            eprintln!(
-                                "ERROR: [check-portability] {}:{}: {}",
-                                mpath.display(),
-                                i + 1,
-                                line
-                            );
-                            print_test_eq_error();
-                            rv = 1;
-                        }
-                    }
+                let Ok(line) = line else {
+                    continue;
+                };
+                /*
+                 * Remove all leading and trailing whitespace to simplify
+                 * matches, and ignore comments.
+                 */
+                let line = line.trim();
+                if line.starts_with('#') {
+                    continue;
+                }
+                if check_random(line) {
+                    eprintln!("WARNING: [check-portability] => Found $RANDOM:");
+                    eprintln!(
+                        "WARNING: [check-portability] {}:{}: {}",
+                        mpath.display(),
+                        i + 1,
+                        line
+                    );
+                    print_random_warning();
+                }
+                if check_test_eq(line) {
+                    eprintln!(
+                        "ERROR: [check-portability] => Found test ... == ...:"
+                    );
+                    eprintln!(
+                        "ERROR: [check-portability] {}:{}: {}",
+                        mpath.display(),
+                        i + 1,
+                        line
+                    );
+                    print_test_eq_error();
+                    rv = 1;
                 }
             }
         }

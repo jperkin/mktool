@@ -19,7 +19,6 @@ native-certs = ["reqwest/native-tls"]
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
-content_inspector = "0.2.4"
 elf = "0.8.0"
 glob = "0.3.3"
 goblin = "0.10.4"
