@@ -102,6 +102,8 @@ pub enum FetchError {
     #[error("Unable to fetch file")]
     NotFound,
     #[error(transparent)]
+    ProgressTemplate(#[from] indicatif::style::TemplateError),
+    #[error(transparent)]
     Reqwest(#[from] reqwest::Error),
     #[error(transparent)]
     ThreadPool(#[from] rayon::ThreadPoolBuildError),
@@ -195,8 +197,7 @@ impl Fetch {
          */
         let style = ProgressStyle::with_template(
             "{prefix:>12} [{bar:57}] {binary_bytes:>7}/{binary_total_bytes:7}",
-        )
-        .unwrap()
+        )?
         .progress_chars("=> ");
         let progress =
             ProgressBar::new(0).with_prefix("Downloading").with_style(style);

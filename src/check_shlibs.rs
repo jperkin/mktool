@@ -426,6 +426,13 @@ impl CheckShlibs {
 mod tests {
     use super::*;
 
+    fn re(s: &str) -> Regex {
+        match Regex::new(s) {
+            Ok(r) => r,
+            Err(e) => panic!("invalid test regex {s}: {e}"),
+        }
+    }
+
     #[test]
     fn test_shlib() {
         let state = CheckState {
@@ -437,10 +444,7 @@ mod tests {
             pkg_admin_cmd: PathBuf::from("/notyet"),
             pkg_admin_args: vec![],
             depends: vec![],
-            toxic: vec![
-                Regex::new("libtoxic.so").unwrap(),
-                Regex::new("^/toxic").unwrap(),
-            ],
+            toxic: vec![re("libtoxic.so"), re("^/toxic")],
             statlibs: HashMap::new(),
             pkgdb: HashMap::new(),
         };

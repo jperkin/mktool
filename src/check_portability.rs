@@ -301,8 +301,11 @@ impl Cmd {
              * next.
              */
             let binsh = b"/bin/sh";
-            let mut lines = buf.splitn(2, |ch| *ch == b'\n');
-            let first = lines.next().unwrap();
+            let Some(newline) = buf[..n].iter().position(|&c| c == b'\n')
+            else {
+                continue 'nextfile;
+            };
+            let first = &buf[..newline];
             if !first.windows(binsh.len()).any(|win| win == binsh) {
                 continue 'nextfile;
             }
