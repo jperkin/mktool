@@ -211,16 +211,18 @@ where
     P1: AsRef<Path>,
     P2: AsRef<Path>,
 {
+    let obj = obj.as_ref();
+    let lib = lib.as_ref();
     let mut rv = true;
 
     /*
      * Library paths must not start with WRKDIR.
      */
-    if lib.as_ref().starts_with(&state.wrkdir) {
+    if lib.starts_with(&state.wrkdir) {
         println!(
             "{}: path relative to WRKDIR: {}",
-            obj.as_ref().display(),
-            lib.as_ref().display()
+            obj.display(),
+            lib.display()
         );
         rv = false;
     }
@@ -229,11 +231,11 @@ where
      * Verify library does not match CHECK_WRKREF_EXTRA_DIRS.
      */
     for dir in &state.wrkref {
-        if lib.as_ref().starts_with(dir) {
+        if lib.starts_with(dir) {
             println!(
                 "{}: rpath {} relative to CHECK_WRKREF_EXTRA_DIRS directory {}",
-                obj.as_ref().display(),
-                lib.as_ref().display(),
+                obj.display(),
+                lib.display(),
                 dir.display()
             );
             rv = false;
@@ -244,12 +246,13 @@ where
      * example if we want to explicitly avoid linking against certain system
      * libraries.
      */
+    let lib_str = lib.to_string_lossy();
     for regex in &state.toxic {
-        if regex.is_match(&lib.as_ref().to_string_lossy()) {
+        if regex.is_match(&lib_str) {
             println!(
                 "{}: resolved path {} matches toxic {}",
-                obj.as_ref().display(),
-                lib.as_ref().display(),
+                obj.display(),
+                lib.display(),
                 regex
             );
             rv = false;
@@ -259,12 +262,8 @@ where
     /*
      * Library paths must be absolute.
      */
-    if !lib.as_ref().starts_with("/") {
-        println!(
-            "{}: relative library path: {}",
-            obj.as_ref().display(),
-            lib.as_ref().display()
-        );
+    if !lib.starts_with("/") {
+        println!("{}: relative library path: {}", obj.display(), lib.display());
         rv = false;
     }
 
