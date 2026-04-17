@@ -89,12 +89,13 @@ impl CheckSum {
         if let Some(infile) = &self.input {
             let reader: Box<dyn io::BufRead> = match infile.to_str() {
                 Some("-") => Box::new(io::stdin().lock()),
-                Some(f) => Box::new(BufReader::new(
-                    fs::File::open(f).unwrap_or_else(|e| {
+                Some(f) => match fs::File::open(f) {
+                    Ok(file) => Box::new(BufReader::new(file)),
+                    Err(e) => {
                         eprintln!("ERROR: Unable to read {f}: {e}");
                         std::process::exit(1);
-                    }),
-                )),
+                    }
+                },
                 None => {
                     eprintln!(
                         "ERROR: File '{}' is not valid unicode.",
@@ -139,18 +140,13 @@ impl CheckSum {
          * missing.
          */
         let mut checkfiles: HashSet<Entry> = HashSet::new();
-        let mut remove: Vec<PathBuf> = Vec::new();
-        for file in &inputfiles {
-            let entry = match distinfo.find_entry(file) {
-                Ok(e) => e,
-                Err(_) => continue,
-            };
-            checkfiles.insert(entry.clone());
-            remove.push(file.to_path_buf());
-        }
-        for r in remove {
-            inputfiles.remove(&r);
-        }
+        inputfiles.retain(|file| match distinfo.find_entry(file) {
+            Ok(entry) => {
+                checkfiles.insert(entry.clone());
+                false
+            }
+            Err(_) => true,
+        });
 
         /*
          * If a single algorithm is requested then only match it.
