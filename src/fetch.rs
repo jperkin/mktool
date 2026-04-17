@@ -229,13 +229,7 @@ impl Fetch {
 
         progress.finish_and_clear();
 
-        let mut rv = 0;
-        for f in &files {
-            if !f.status {
-                rv = 1;
-                break;
-            }
-        }
+        let rv = i32::from(files.iter().any(|f| !f.status));
 
         /*
          * Only print the final message if we downloaded something and
