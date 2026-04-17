@@ -27,12 +27,8 @@ pub struct Cmd {}
 
 fn check_random(line: &str) -> bool {
     let mut rv = false;
-    let matches: Vec<_> = line.match_indices("$RANDOM").collect();
-    if matches.is_empty() {
-        return false;
-    }
-    for m in &matches {
-        let start = m.0;
+    let bytes = line.as_bytes();
+    for (start, _) in line.match_indices("$RANDOM") {
         let next = start + "$RANDOM".len();
 
         /*
@@ -41,10 +37,10 @@ fn check_random(line: &str) -> bool {
          * shell then are considered acceptable.  Turning this off produces
          * lots of false positives in e.g. config.guess.
          */
-        if start >= 3 && line[start - 3..start] == *"$$-" {
+        if start >= 3 && &bytes[start - 3..start] == b"$$-" {
             return false;
         }
-        if next + 2 < line.len() && line[next..next + 3] == *"-$$" {
+        if bytes.get(next..next + 3) == Some(b"-$$") {
             return false;
         }
 
@@ -53,11 +49,9 @@ fn check_random(line: &str) -> bool {
          * $RANDOMIZE is considered acceptable, but only if there is no bare
          * $RANDOM elsewhere on the line, so continue to other matches.
          */
-        if next < line.len() {
-            if let Some(ch) = line.chars().nth(next) {
-                if ch.is_ascii_uppercase() || ch == '_' {
-                    continue;
-                }
+        if let Some(&b) = bytes.get(next) {
+            if b.is_ascii_uppercase() || b == b'_' {
+                continue;
             }
         }
 
