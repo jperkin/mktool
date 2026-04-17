@@ -26,7 +26,7 @@ use std::fs;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
 use std::net::ToSocketAddrs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process;
 use std::sync::LazyLock;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -210,9 +210,12 @@ impl Fetch {
 
         pool.install(|| {
             files.par_iter_mut().for_each(|file| {
-                if let Err(e) =
-                    fetch_and_verify(&client, file, &distinfo, &progress)
-                {
+                if let Err(e) = fetch_and_verify(
+                    &client,
+                    file,
+                    distinfo.as_ref(),
+                    &progress,
+                ) {
                     progress.suspend(|| {
                         eprintln!(
                             "Failed to fetch {}: {e}",
@@ -282,7 +285,7 @@ fn url_from_site(site: &str, filename: &str) -> String {
  */
 fn fetch_ftp(
     url: &Url,
-    filename: &PathBuf,
+    filename: &Path,
     progress: &ProgressBar,
 ) -> Result<u64, FetchError> {
     let host = url.host_str().ok_or(FetchError::NotFound)?;
@@ -337,7 +340,7 @@ fn fetch_ftp(
 fn fetch_and_verify(
     client: &Client,
     file: &FetchFile,
-    distinfo: &Option<Distinfo>,
+    distinfo: Option<&Distinfo>,
     progress: &ProgressBar,
 ) -> Result<u64, FetchError> {
     // Set the target filename
@@ -551,7 +554,7 @@ fn build_client() -> Result<Client, reqwest::Error> {
     Client::builder().referer(false).connect_timeout(*CONNECT_TIMEOUT).build()
 }
 
-fn remove_temp(path: &PathBuf) {
+fn remove_temp(path: &Path) {
     if let Err(e) = fs::remove_file(path) {
         if e.kind() != io::ErrorKind::NotFound {
             eprintln!("Failed to remove {}: {e}", path.display());
@@ -564,10 +567,7 @@ fn remove_temp(path: &PathBuf) {
  * already exists (another process won the race), just remove the temp
  * file and return success.
  */
-fn rename_to_final(
-    temp: &PathBuf,
-    final_path: &PathBuf,
-) -> Result<u64, FetchError> {
+fn rename_to_final(temp: &Path, final_path: &Path) -> Result<u64, FetchError> {
     if final_path.exists() {
         if let Err(e) = fs::remove_file(temp) {
             eprintln!("Failed to remove {}: {e}", temp.display());
