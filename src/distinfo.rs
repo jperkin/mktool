@@ -14,13 +14,12 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-use crate::MKTOOL_DEFAULT_THREADS;
+use crate::build_thread_pool;
 use clap::Args;
 use pkgsrc::digest::Digest;
 use pkgsrc::distinfo::{Checksum, Distinfo, Entry, EntryType};
 use rayon::prelude::*;
 use std::collections::HashSet;
-use std::env;
 use std::fs;
 use std::io::{self, BufRead, BufReader, Write};
 use std::path::PathBuf;
@@ -210,59 +209,42 @@ impl DistInfo {
          */
         entries.sort_by(|a, b| a.filepath.cmp(&b.filepath));
 
-        /*
-         * Set up rayon threadpool.  -j argument has highest precedence, then
-         * MKTOOLS_JOBS environment variable, finally MKTOOL_DEFAULT_THREADS.
-         */
-        let nthreads = match self.jobs {
-            Some(n) => n,
-            None => match env::var("MKTOOL_JOBS") {
-                Ok(n) => match n.parse::<usize>() {
-                    Ok(n) => n,
-                    Err(e) => {
-                        eprintln!(
-                            "WARNING: invalid MKTOOL_JOBS '{n}': {e}, using default"
-                        );
-                        MKTOOL_DEFAULT_THREADS
-                    }
-                },
-                Err(_) => MKTOOL_DEFAULT_THREADS,
-            },
-        };
-        rayon::ThreadPoolBuilder::new()
-            .num_threads(nthreads)
-            .build_global()
-            .unwrap();
+        let pool = build_thread_pool(self.jobs)?;
 
         /*
          * Calculate checksums for each Entry, and size for Distfile entries,
          * storing results back into the Entry.
          */
-        entries.par_iter_mut().for_each(|entry| {
-            for c in entry.checksums.iter_mut() {
-                match Distinfo::calculate_checksum(&entry.filepath, c.digest) {
-                    Ok(h) => c.hash = h,
-                    Err(e) => {
-                        eprintln!(
-                            "Unable to calculate checksum for {}: {}",
-                            &entry.filepath.display(),
-                            e
-                        );
-                    }
-                };
-            }
-            if entry.filetype == EntryType::Distfile {
-                match Distinfo::calculate_size(&entry.filepath) {
-                    Ok(s) => entry.size = Some(s),
-                    Err(e) => {
-                        eprintln!(
-                            "Unable to calculate size for {}: {}",
-                            &entry.filepath.display(),
-                            e
-                        );
-                    }
-                };
-            }
+        pool.install(|| {
+            entries.par_iter_mut().for_each(|entry| {
+                for c in entry.checksums.iter_mut() {
+                    match Distinfo::calculate_checksum(
+                        &entry.filepath,
+                        c.digest,
+                    ) {
+                        Ok(h) => c.hash = h,
+                        Err(e) => {
+                            eprintln!(
+                                "Unable to calculate checksum for {}: {}",
+                                &entry.filepath.display(),
+                                e
+                            );
+                        }
+                    };
+                }
+                if entry.filetype == EntryType::Distfile {
+                    match Distinfo::calculate_size(&entry.filepath) {
+                        Ok(s) => entry.size = Some(s),
+                        Err(e) => {
+                            eprintln!(
+                                "Unable to calculate size for {}: {}",
+                                &entry.filepath.display(),
+                                e
+                            );
+                        }
+                    };
+                }
+            });
         });
 
         /*

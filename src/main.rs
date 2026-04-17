@@ -25,6 +25,32 @@ mod symlinks;
 
 const MKTOOL_DEFAULT_THREADS: usize = 4;
 
+/*
+ * Build a rayon thread pool sized from (in order of precedence) the -j flag,
+ * MKTOOL_JOBS env var, or MKTOOL_DEFAULT_THREADS.  A malformed MKTOOL_JOBS
+ * emits a warning and falls back to the default.
+ */
+pub fn build_thread_pool(
+    jobs: Option<usize>,
+) -> Result<rayon::ThreadPool, rayon::ThreadPoolBuildError> {
+    let nthreads = match jobs {
+        Some(n) => n,
+        None => match std::env::var("MKTOOL_JOBS") {
+            Ok(s) => match s.parse::<usize>() {
+                Ok(n) => n,
+                Err(e) => {
+                    eprintln!(
+                        "WARNING: invalid MKTOOL_JOBS '{s}': {e}, using default"
+                    );
+                    MKTOOL_DEFAULT_THREADS
+                }
+            },
+            Err(_) => MKTOOL_DEFAULT_THREADS,
+        },
+    };
+    rayon::ThreadPoolBuilder::new().num_threads(nthreads).build()
+}
+
 use clap::{Parser, Subcommand};
 
 #[derive(Debug, Parser)]

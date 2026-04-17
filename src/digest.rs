@@ -14,11 +14,10 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-use crate::MKTOOL_DEFAULT_THREADS;
+use crate::build_thread_pool;
 use clap::Args;
 use pkgsrc::digest::Digest;
 use rayon::prelude::*;
-use std::env;
 use std::fs;
 use std::io::{self, Cursor, Read};
 use std::path::PathBuf;
@@ -62,29 +61,7 @@ impl DigestCmd {
             return Ok(0);
         };
 
-        /*
-         * Set up rayon threadpool.  -j argument has highest precedence, then
-         * MKTOOLS_JOBS environment variable, finally MKTOOL_DEFAULT_THREADS.
-         */
-        let nthreads = match self.jobs {
-            Some(n) => n,
-            None => match env::var("MKTOOL_JOBS") {
-                Ok(n) => match n.parse::<usize>() {
-                    Ok(n) => n,
-                    Err(e) => {
-                        eprintln!(
-                            "WARNING: invalid MKTOOL_JOBS '{n}': {e}, using default"
-                        );
-                        MKTOOL_DEFAULT_THREADS
-                    }
-                },
-                Err(_) => MKTOOL_DEFAULT_THREADS,
-            },
-        };
-        rayon::ThreadPoolBuilder::new()
-            .num_threads(nthreads)
-            .build_global()
-            .unwrap();
+        let pool = build_thread_pool(self.jobs)?;
 
         /*
          * Set up a vec of DigestResult so that the calculated hashes can be
@@ -99,14 +76,16 @@ impl DigestCmd {
             })
             .collect();
 
-        hashfiles.par_iter_mut().for_each(|file| {
-            match fs::File::open(&file.path) {
-                Ok(mut f) => match algorithm.hash_file(&mut f) {
-                    Ok(h) => file.hash = Some(h),
+        pool.install(|| {
+            hashfiles.par_iter_mut().for_each(|file| {
+                match fs::File::open(&file.path) {
+                    Ok(mut f) => match algorithm.hash_file(&mut f) {
+                        Ok(h) => file.hash = Some(h),
+                        Err(e) => file.error = e.to_string(),
+                    },
                     Err(e) => file.error = e.to_string(),
-                },
-                Err(e) => file.error = e.to_string(),
-            }
+                }
+            });
         });
 
         /*

@@ -14,7 +14,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-use crate::MKTOOL_DEFAULT_THREADS;
+use crate::build_thread_pool;
 use clap::Args;
 use indicatif::{HumanBytes, HumanDuration, ProgressBar, ProgressStyle};
 use pkgsrc::distinfo::Distinfo;
@@ -104,6 +104,8 @@ pub enum FetchError {
     #[error(transparent)]
     Reqwest(#[from] reqwest::Error),
     #[error(transparent)]
+    ThreadPool(#[from] rayon::ThreadPoolBuildError),
+    #[error(transparent)]
     Url(#[from] url::ParseError),
 }
 
@@ -186,29 +188,7 @@ impl Fetch {
             }
         }
 
-        /*
-         * Set up rayon threadpool.  -j argument has highest precedence, then
-         * MKTOOLS_JOBS environment variable, finally MKTOOL_DEFAULT_THREADS.
-         */
-        let nthreads = match self.jobs {
-            Some(n) => n,
-            None => match env::var("MKTOOL_JOBS") {
-                Ok(n) => match n.parse::<usize>() {
-                    Ok(n) => n,
-                    Err(e) => {
-                        eprintln!(
-                            "WARNING: invalid MKTOOL_JOBS '{n}': {e}, using default"
-                        );
-                        MKTOOL_DEFAULT_THREADS
-                    }
-                },
-                Err(_) => MKTOOL_DEFAULT_THREADS,
-            },
-        };
-        rayon::ThreadPoolBuilder::new()
-            .num_threads(nthreads)
-            .build_global()
-            .unwrap();
+        let pool = build_thread_pool(self.jobs)?;
 
         /*
          * Set up the progress bar.
@@ -227,18 +207,20 @@ impl Fetch {
          */
         let client = build_client()?;
 
-        files.par_iter_mut().for_each(|file| {
-            if let Err(e) =
-                fetch_and_verify(&client, file, &distinfo, &progress)
-            {
-                progress.suspend(|| {
-                    eprintln!(
-                        "Failed to fetch {}: {e}",
-                        file.distdir.join(&file.filepath).display(),
-                    );
-                });
-                file.status = false;
-            }
+        pool.install(|| {
+            files.par_iter_mut().for_each(|file| {
+                if let Err(e) =
+                    fetch_and_verify(&client, file, &distinfo, &progress)
+                {
+                    progress.suspend(|| {
+                        eprintln!(
+                            "Failed to fetch {}: {e}",
+                            file.distdir.join(&file.filepath).display(),
+                        );
+                    });
+                    file.status = false;
+                }
+            });
         });
 
         progress.finish_and_clear();

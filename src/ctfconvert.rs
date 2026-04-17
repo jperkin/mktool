@@ -14,13 +14,12 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-use crate::MKTOOL_DEFAULT_THREADS;
+use crate::build_thread_pool;
 use clap::Args;
 use elf::ElfBytes;
 use elf::endian::AnyEndian;
 use rayon::prelude::*;
 use std::collections::HashSet;
-use std::env;
 use std::fs;
 use std::io::{self, BufRead, BufReader};
 use std::path::PathBuf;
@@ -93,26 +92,7 @@ impl CTFConvert {
             .map(|path| CTFFile { path, error: String::new() })
             .collect();
 
-        /*
-         * Set up rayon threadpool.  -j argument has highest precedence, then
-         * MKTOOLS_JOBS environment variable, finally MKTOOL_DEFAULT_THREADS.
-         */
-        let nthreads = match self.jobs {
-            Some(n) => n,
-            None => match env::var("MKTOOL_JOBS") {
-                Ok(n) => match n.parse::<usize>() {
-                    Ok(n) => n,
-                    Err(e) => {
-                        eprintln!(
-                            "WARNING: invalid MKTOOL_JOBS '{n}': {e}, using default"
-                        );
-                        MKTOOL_DEFAULT_THREADS
-                    }
-                },
-                Err(_) => MKTOOL_DEFAULT_THREADS,
-            },
-        };
-        rayon::ThreadPoolBuilder::new().num_threads(nthreads).build_global()?;
+        let pool = build_thread_pool(self.jobs)?;
 
         /*
          * The behaviour of ctfconvert with the "-m" flag that we use is as
@@ -147,107 +127,112 @@ impl CTFConvert {
          *   - If the output file contains .SUNW_ctf then print it to stdout
          *     to indicate a successful conversion, otherwise record an error.
          */
-        inputfiles.par_iter_mut().for_each(|file| {
-            let infile = match fs::read(&file.path) {
-                Ok(f) => f,
-                Err(e) => {
-                    file.error = format!("unable to read file: {e}");
-                    return;
-                }
-            };
-            if ElfBytes::<AnyEndian>::minimal_parse(&infile).is_err() {
-                return;
-            }
-
-            let mut outfile = PathBuf::from(&file.path);
-            if let Some(fname) = outfile.file_name() {
-                let mut newname = fname.to_os_string();
-                newname.push(".ctf");
-                outfile.set_file_name(newname);
-            }
-
-            let cmd = match Command::new(&self.ctfconvert)
-                .arg("-m")
-                .arg("-o")
-                .arg(&outfile)
-                .arg(&file.path)
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
-                .spawn()
-            {
-                Ok(c) => c,
-                Err(e) => {
-                    file.error = format!("unable to execute ctfconvert: {e}");
-                    return;
-                }
-            };
-            let cmd = match cmd.wait_with_output() {
-                Ok(c) => c,
-                Err(e) => {
-                    file.error = format!("ctfconvert failed: {e}");
-                    let _ = fs::remove_file(&outfile);
-                    return;
-                }
-            };
-
-            /*
-             * The input files are usually ${DESTDIR}${PREFIX}/... and so the
-             * -s flag allows that prefix to be pruned for cleaner output.
-             */
-            let filename = match &file.path.strip_prefix(&self.strip_prefix) {
-                Ok(s) => s.display(),
-                Err(_) => file.path.display(),
-            };
-
-            /*
-             * Print conversion errors to stderr, prefixed with the file
-             * that caused them for easier diagnosis.
-             */
-            let stderr = String::from_utf8_lossy(&cmd.stderr);
-            for line in stderr.lines() {
-                eprintln!("{filename}: {line}");
-            }
-
-            if outfile.exists() {
-                let out = match fs::read(&outfile) {
+        pool.install(|| {
+            inputfiles.par_iter_mut().for_each(|file| {
+                let infile = match fs::read(&file.path) {
                     Ok(f) => f,
                     Err(e) => {
-                        file.error = format!("unable to read output: {e}");
-                        let _ = fs::remove_file(&outfile);
+                        file.error = format!("unable to read file: {e}");
                         return;
                     }
                 };
-                let elf = match ElfBytes::<AnyEndian>::minimal_parse(
-                    out.as_slice(),
-                ) {
-                    Ok(e) => e,
+                if ElfBytes::<AnyEndian>::minimal_parse(&infile).is_err() {
+                    return;
+                }
+
+                let mut outfile = PathBuf::from(&file.path);
+                if let Some(fname) = outfile.file_name() {
+                    let mut newname = fname.to_os_string();
+                    newname.push(".ctf");
+                    outfile.set_file_name(newname);
+                }
+
+                let cmd = match Command::new(&self.ctfconvert)
+                    .arg("-m")
+                    .arg("-o")
+                    .arg(&outfile)
+                    .arg(&file.path)
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped())
+                    .spawn()
+                {
+                    Ok(c) => c,
                     Err(e) => {
-                        file.error = format!("output is not valid ELF: {e}");
+                        file.error =
+                            format!("unable to execute ctfconvert: {e}");
+                        return;
+                    }
+                };
+                let cmd = match cmd.wait_with_output() {
+                    Ok(c) => c,
+                    Err(e) => {
+                        file.error = format!("ctfconvert failed: {e}");
                         let _ = fs::remove_file(&outfile);
                         return;
                     }
                 };
-                match elf.section_header_by_name(".SUNW_ctf") {
-                    Ok(Some(_)) => {
-                        println!("{filename}");
-                        if let Err(e) = fs::rename(&outfile, &file.path) {
+
+                /*
+                 * The input files are usually ${DESTDIR}${PREFIX}/... and so the
+                 * -s flag allows that prefix to be pruned for cleaner output.
+                 */
+                let filename = match &file.path.strip_prefix(&self.strip_prefix)
+                {
+                    Ok(s) => s.display(),
+                    Err(_) => file.path.display(),
+                };
+
+                /*
+                 * Print conversion errors to stderr, prefixed with the file
+                 * that caused them for easier diagnosis.
+                 */
+                let stderr = String::from_utf8_lossy(&cmd.stderr);
+                for line in stderr.lines() {
+                    eprintln!("{filename}: {line}");
+                }
+
+                if outfile.exists() {
+                    let out = match fs::read(&outfile) {
+                        Ok(f) => f,
+                        Err(e) => {
+                            file.error = format!("unable to read output: {e}");
+                            let _ = fs::remove_file(&outfile);
+                            return;
+                        }
+                    };
+                    let elf = match ElfBytes::<AnyEndian>::minimal_parse(
+                        out.as_slice(),
+                    ) {
+                        Ok(e) => e,
+                        Err(e) => {
                             file.error =
-                                format!("unable to rename output: {e}");
+                                format!("output is not valid ELF: {e}");
+                            let _ = fs::remove_file(&outfile);
+                            return;
+                        }
+                    };
+                    match elf.section_header_by_name(".SUNW_ctf") {
+                        Ok(Some(_)) => {
+                            println!("{filename}");
+                            if let Err(e) = fs::rename(&outfile, &file.path) {
+                                file.error =
+                                    format!("unable to rename output: {e}");
+                                let _ = fs::remove_file(&outfile);
+                            }
+                        }
+                        Ok(None) => {
+                            file.error =
+                                "output does not contain CTF data".to_string();
+                            let _ = fs::remove_file(&outfile);
+                        }
+                        Err(e) => {
+                            file.error =
+                                format!("unable to parse ELF sections: {e}");
                             let _ = fs::remove_file(&outfile);
                         }
                     }
-                    Ok(None) => {
-                        file.error =
-                            "output does not contain CTF data".to_string();
-                        let _ = fs::remove_file(&outfile);
-                    }
-                    Err(e) => {
-                        file.error =
-                            format!("unable to parse ELF sections: {e}");
-                        let _ = fs::remove_file(&outfile);
-                    }
                 }
-            }
+            });
         });
 
         let mut rv = 0;
