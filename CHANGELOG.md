@@ -1,3 +1,8 @@
+## Version 1.5.8 (2026-04-20)
+
+* Many minor code cleanups, performance improvements, security enhancements,
+  and fixes for some potential but unlikely failures.
+
 ## Version 1.5.7 (2026-04-08)
 
 * check-shlibs: Fix issue causing macOS libraries to erroneously pass.
