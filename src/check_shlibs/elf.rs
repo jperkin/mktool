@@ -31,12 +31,12 @@ impl CheckShlibs {
             Err(_) => return Ok(()),
         };
 
-        let mut rpaths: Vec<String> = vec![];
+        let mut rpaths: Vec<&str> = vec![];
         if let Some(p) = elf.runpaths.first() {
-            rpaths.extend(p.split(':').map(|s| s.to_string()));
+            rpaths.extend(p.split(':'));
         }
         if let Some(p) = elf.rpaths.first() {
-            rpaths.extend(p.split(':').map(|s| s.to_string()));
+            rpaths.extend(p.split(':'));
         }
 
         /*
@@ -52,7 +52,7 @@ impl CheckShlibs {
              * come first, otherwise check_pkg will fail when a library that
              * belongs to this package is found to be installed.
              */
-            for rpath in &rpaths {
+            for &rpath in &rpaths {
                 let mut libpath = state.destdir.clone();
                 let rp = PathBuf::from(rpath);
                 match rp.strip_prefix("/") {
@@ -76,7 +76,7 @@ impl CheckShlibs {
             /*
              * RUNPATH entries.  Add CROSS_DESTDIR prefix if set.
              */
-            for rpath in &rpaths {
+            for &rpath in &rpaths {
                 let mut libpath: PathBuf;
                 match &state.cross_destdir {
                     Some(crossdir) => {
