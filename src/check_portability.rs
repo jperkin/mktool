@@ -18,6 +18,7 @@ extern crate glob;
 
 use crate::scrub_ctrl;
 use clap::Args;
+use std::collections::HashSet;
 use std::fs;
 use std::io::{BufRead, BufReader, Read};
 use walkdir::WalkDir;
@@ -199,7 +200,7 @@ impl Cmd {
         /*
          * Get list of patched files.
          */
-        let mut patched = vec![];
+        let mut patched: HashSet<String> = HashSet::new();
         if let Ok(patchdir) = std::env::var("PATCHDIR") {
             for patch in
                 WalkDir::new(patchdir).into_iter().filter_map(|e| e.ok())
@@ -218,7 +219,7 @@ impl Cmd {
                         let v: Vec<&str> =
                             line.splitn(2, char::is_whitespace).collect();
                         if v.len() == 2 {
-                            patched.push(v[1].to_string());
+                            patched.insert(v[1].to_string());
                         }
                         break;
                     }
@@ -250,7 +251,7 @@ impl Cmd {
             if let Some(p) =
                 entry.file_name().to_string_lossy().strip_suffix(".in")
             {
-                if patched.contains(&p.into()) {
+                if patched.contains(p) {
                     continue 'nextfile;
                 }
             }
