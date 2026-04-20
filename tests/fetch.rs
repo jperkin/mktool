@@ -15,7 +15,7 @@
  */
 
 use std::fs;
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 use std::net::TcpListener;
 use std::path::Path;
 use std::process::{Command, Stdio};
@@ -38,14 +38,20 @@ fn free_port() -> Result<u16> {
 
 /*
  * Run a one-shot in-process mock TCP server on an ephemeral port.
- * Accepts a single connection, writes `response`, then drains the
- * client side until it closes (so the final TCP close is a clean FIN
- * rather than an RST that might discard our response).
+ * Accepts a single connection, optionally reads the client's HTTP
+ * request headers first (for `wait_for_request`), writes `response`,
+ * then drains the client side until it closes (so the final TCP close
+ * is a clean FIN rather than an RST that might discard our response).
  *
  * Unlike spawning `nc`, the port is in the LISTEN state before this
  * function returns, eliminating the startup race.
+ *
+ * `wait_for_request` must be true for HTTP: hyper's HTTP/1 client
+ * errors with "received unexpected message from connection" if
+ * response bytes arrive while it's still writing the request.  FTP
+ * servers speak first (banner), so pass false for FTP.
  */
-fn mock_server(response: &[u8]) -> Result<u16> {
+fn mock_server(response: &[u8], wait_for_request: bool) -> Result<u16> {
     let listener = TcpListener::bind("127.0.0.1:0")?;
     let port = listener.local_addr()?.port();
     let response = response.to_vec();
@@ -53,6 +59,21 @@ fn mock_server(response: &[u8]) -> Result<u16> {
         let Ok((mut stream, _)) = listener.accept() else {
             return;
         };
+        if wait_for_request {
+            let mut buf = [0u8; 4096];
+            let mut req: Vec<u8> = Vec::new();
+            loop {
+                match stream.read(&mut buf) {
+                    Ok(0) | Err(_) => return,
+                    Ok(n) => {
+                        req.extend_from_slice(&buf[..n]);
+                        if req.windows(4).any(|w| w == b"\r\n\r\n") {
+                            break;
+                        }
+                    }
+                }
+            }
+        }
         let _ = stream.write_all(&response);
         let _ = io::copy(&mut stream, &mut io::sink());
     });
@@ -258,7 +279,7 @@ fn fetch_ftp_bad_checksum() -> Result<()> {
  */
 #[test]
 fn fetch_ftp_read_timeout() -> Result<()> {
-    let port = mock_server(b"220 ready\r\n")?;
+    let port = mock_server(b"220 ready\r\n", false)?;
 
     let dir = tempfile::tempdir()?;
     let distdir = dir.path().to_str().ok_or("invalid tempdir path")?;
@@ -329,8 +350,10 @@ fn fetch_invalid_input() -> Result<()> {
  */
 #[test]
 fn fetch_http_404() -> Result<()> {
-    let port =
-        mock_server(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n")?;
+    let port = mock_server(
+        b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n",
+        true,
+    )?;
 
     let dir = tempfile::tempdir()?;
     let distdir = dir.path().to_str().ok_or("invalid tempdir path")?;
