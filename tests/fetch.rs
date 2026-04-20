@@ -15,46 +15,48 @@
  */
 
 use std::fs;
-use std::io::Write;
+use std::io::{self, Write};
 use std::net::TcpListener;
 use std::path::Path;
-use std::process::{Child, Command, Stdio};
+use std::process::{Command, Stdio};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 const MKTOOL: &str = env!("CARGO_BIN_EXE_mktool");
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
+/*
+ * Return an ephemeral port that was free at the time of this call.
+ * Inherently racy: any other process can grab it before the caller
+ * does, so only use this where the caller specifically wants a port
+ * with nothing listening (e.g. connect-error tests).
+ */
 fn free_port() -> Result<u16> {
     Ok(TcpListener::bind("127.0.0.1:0")?.local_addr()?.port())
 }
 
-fn start_nc(port: u16, initial_response: &str) -> Result<Child> {
-    let child = Command::new("sh")
-        .args([
-            "-c",
-            &format!(
-                "(printf '{initial_response}'; cat) | nc -l 127.0.0.1 {port}"
-            ),
-        ])
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()?;
-    wait_for_port(port);
-    Ok(child)
-}
-
-fn wait_for_port(port: u16) {
-    let deadline = Instant::now() + Duration::from_secs(5);
-    while Instant::now() < deadline {
-        if TcpListener::bind(("127.0.0.1", port)).is_err() {
+/*
+ * Run a one-shot in-process mock TCP server on an ephemeral port.
+ * Accepts a single connection, writes `response`, then drains the
+ * client side until it closes (so the final TCP close is a clean FIN
+ * rather than an RST that might discard our response).
+ *
+ * Unlike spawning `nc`, the port is in the LISTEN state before this
+ * function returns, eliminating the startup race.
+ */
+fn mock_server(response: &[u8]) -> Result<u16> {
+    let listener = TcpListener::bind("127.0.0.1:0")?;
+    let port = listener.local_addr()?.port();
+    let response = response.to_vec();
+    thread::spawn(move || {
+        let Ok((mut stream, _)) = listener.accept() else {
             return;
-        }
-        thread::sleep(Duration::from_millis(10));
-    }
-    panic!("nc did not start listening on port {port} in time");
+        };
+        let _ = stream.write_all(&response);
+        let _ = io::copy(&mut stream, &mut io::sink());
+    });
+    Ok(port)
 }
 
 fn has_temp_files(dir: &Path) -> Result<bool> {
@@ -256,8 +258,7 @@ fn fetch_ftp_bad_checksum() -> Result<()> {
  */
 #[test]
 fn fetch_ftp_read_timeout() -> Result<()> {
-    let port = free_port()?;
-    let mut nc = start_nc(port, "220 ready\\r\\n")?;
+    let port = mock_server(b"220 ready\r\n")?;
 
     let dir = tempfile::tempdir()?;
     let distdir = dir.path().to_str().ok_or("invalid tempdir path")?;
@@ -281,9 +282,6 @@ fn fetch_ftp_read_timeout() -> Result<()> {
 
     let output = child.wait_with_output()?;
     let elapsed = start.elapsed();
-
-    let _ = nc.kill();
-    let _ = nc.wait();
 
     let stderr = String::from_utf8_lossy(&output.stderr);
 
@@ -331,11 +329,8 @@ fn fetch_invalid_input() -> Result<()> {
  */
 #[test]
 fn fetch_http_404() -> Result<()> {
-    let port = free_port()?;
-    let mut nc = start_nc(
-        port,
-        "HTTP/1.1 404 Not Found\\r\\nContent-Length: 0\\r\\n\\r\\n",
-    )?;
+    let port =
+        mock_server(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n")?;
 
     let dir = tempfile::tempdir()?;
     let distdir = dir.path().to_str().ok_or("invalid tempdir path")?;
@@ -355,10 +350,6 @@ fn fetch_http_404() -> Result<()> {
     drop(stdin);
 
     let output = child.wait_with_output()?;
-
-    let _ = nc.kill();
-    let _ = nc.wait();
-
     let stderr = String::from_utf8_lossy(&output.stderr);
 
     assert!(!output.status.success(), "fetch should have failed: {stderr}");
