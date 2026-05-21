@@ -1,3 +1,7 @@
+## Version 1.5.9 (2026-05-21)
+
+* checksum: Fix error handling and improve compatibility with checksum.awk.
+
 ## Version 1.5.8 (2026-04-20)
 
 * Many minor code cleanups, performance improvements, security enhancements,
