@@ -19,7 +19,7 @@ use clap::Args;
 use pkgsrc::digest::Digest;
 use pkgsrc::distinfo::{Distinfo, DistinfoError, Entry};
 use rayon::prelude::*;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::{self, BufRead, BufReader};
 use std::path::PathBuf;
@@ -83,9 +83,26 @@ impl CheckSum {
         /*
          * Add files passed in via -I (supporting stdin if set to "-"), and
          * then those passed on the command line, storing unique entries in
-         * the inputfiles HashSet.
+         * the inputfiles map.  The key is the lookup name used to find the
+         * distinfo entry (post -s suffix strip), and the value is the
+         * original path as supplied, which is what is actually opened for
+         * hashing.  These differ when -s is used to verify a temporary
+         * download file against a distinfo entry that lacks the suffix.
          */
-        let mut inputfiles: HashSet<PathBuf> = HashSet::new();
+        let mut inputfiles: HashMap<PathBuf, PathBuf> = HashMap::new();
+        let mut insert = |orig: PathBuf| {
+            let lookup = match &self.stripsuffix {
+                Some(suffix) => match orig
+                    .to_str()
+                    .and_then(|s| s.strip_suffix(suffix.as_str()))
+                {
+                    Some(s) => PathBuf::from(s),
+                    None => orig.clone(),
+                },
+                None => orig.clone(),
+            };
+            inputfiles.insert(lookup, orig);
+        };
 
         if let Some(infile) = &self.input {
             let reader: Box<dyn io::BufRead> = match infile.to_str() {
@@ -107,25 +124,11 @@ impl CheckSum {
             };
             for line in reader.lines() {
                 let line = line?;
-                if let Some(suffix) = &self.stripsuffix {
-                    match line.strip_suffix(suffix) {
-                        Some(s) => inputfiles.insert(PathBuf::from(s)),
-                        None => inputfiles.insert(PathBuf::from(line)),
-                    };
-                } else {
-                    inputfiles.insert(PathBuf::from(line));
-                }
+                insert(PathBuf::from(line));
             }
         }
         for file in &self.files {
-            if let Some(suffix) = &self.stripsuffix {
-                match file.to_str().and_then(|s| s.strip_suffix(suffix)) {
-                    Some(s) => inputfiles.insert(PathBuf::from(s)),
-                    None => inputfiles.insert(PathBuf::from(file)),
-                };
-            } else {
-                inputfiles.insert(PathBuf::from(file));
-            }
+            insert(file.clone());
         }
 
         /*
@@ -142,10 +145,10 @@ impl CheckSum {
          */
         let mut checkfiles: Vec<(PathBuf, Entry)> = vec![];
         let mut seen: HashSet<PathBuf> = HashSet::new();
-        inputfiles.retain(|file| match distinfo.find_entry(file) {
+        inputfiles.retain(|lookup, orig| match distinfo.find_entry(lookup) {
             Ok(entry) => {
                 if seen.insert(entry.filename.clone()) {
-                    checkfiles.push((file.clone(), entry.clone()));
+                    checkfiles.push((orig.clone(), entry.clone()));
                 }
                 false
             }
@@ -211,11 +214,11 @@ impl CheckSum {
                         /* checksum.awk bails on first mismatch */
                         return Ok(1);
                     }
-                    Err(DistinfoError::MissingChecksum(path, digest)) => {
+                    Err(DistinfoError::MissingChecksum(_, digest)) => {
                         eprintln!(
                             "checksum: No {} checksum recorded for {}",
                             digest,
-                            path.display()
+                            file.entry.filename.display()
                         );
                         rv = 2;
                     }
@@ -231,7 +234,7 @@ impl CheckSum {
          * in behaviour here and ensure they are sorted, mainly because it
          * ensures test results are stable.
          */
-        let mut missing: Vec<PathBuf> = inputfiles.into_iter().collect();
+        let mut missing: Vec<PathBuf> = inputfiles.into_keys().collect();
         missing.sort();
         for file in missing {
             if let Some(digest) = single_digest {

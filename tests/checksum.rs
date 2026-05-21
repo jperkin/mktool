@@ -290,6 +290,60 @@ fn test_checksum_strip_mode() -> Result<()> {
 }
 
 /*
+ * Verify that with -s, the file actually opened for hashing is the
+ * original (suffix-included) path, not the suffix-stripped lookup name.
+ * The setup writes the suffix-included file into a directory that does
+ * NOT contain the suffix-stripped filename, so opening by the stripped
+ * name would fail with ENOENT.  Also verify that MissingChecksum reports
+ * the stripped name (matching checksum.awk), not the supplied path.
+ */
+#[test]
+fn test_checksum_strip_opens_original() -> Result<()> {
+    let mut distinfo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    distinfo.push("tests/data/distinfo");
+    let mut src = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    src.push("tests/data/digest1.txt");
+    let tmpdir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join("test_checksum_strip_opens_original");
+    fs::create_dir_all(&tmpdir)?;
+    let tmpfile = tmpdir.join("digest1.txt.fetchtmp");
+    fs::copy(&src, &tmpfile)?;
+    assert!(!tmpdir.join("digest1.txt").exists());
+
+    let output = "=> Checksum SHA512 OK for digest1.txt\n";
+    let cmd = Command::new(MKTOOL)
+        .arg("checksum")
+        .arg("-a")
+        .arg("SHA512")
+        .arg("-s")
+        .arg(".fetchtmp")
+        .arg(&distinfo)
+        .arg("digest1.txt.fetchtmp")
+        .current_dir(&tmpdir)
+        .output()?;
+    assert_eq!(cmd.status.code(), Some(0));
+    assert_eq!(cmd.stdout, output.as_bytes());
+    assert_eq!(cmd.stderr, "".as_bytes());
+
+    let output = "checksum: No SHA1 checksum recorded for digest1.txt\n";
+    let cmd = Command::new(MKTOOL)
+        .arg("checksum")
+        .arg("-a")
+        .arg("SHA1")
+        .arg("-s")
+        .arg(".fetchtmp")
+        .arg(&distinfo)
+        .arg("digest1.txt.fetchtmp")
+        .current_dir(&tmpdir)
+        .output()?;
+    fs::remove_dir_all(&tmpdir)?;
+    assert_eq!(cmd.status.code(), Some(2));
+    assert_eq!(cmd.stdout, "".as_bytes());
+    assert_eq!(cmd.stderr, output.as_bytes());
+    Ok(())
+}
+
+/*
  * Test strip suffix mode via -I input file.
  */
 #[test]
