@@ -58,6 +58,7 @@ pub struct CheckSum {
 
 #[derive(Debug)]
 struct CheckResult {
+    path: PathBuf,
     entry: Entry,
     results: Vec<Result<Digest, DistinfoError>>,
 }
@@ -139,10 +140,13 @@ impl CheckSum {
          * distinfo.  Any entries left in inputfiles are later printed as
          * missing.
          */
-        let mut checkfiles: HashSet<Entry> = HashSet::new();
+        let mut checkfiles: Vec<(PathBuf, Entry)> = vec![];
+        let mut seen: HashSet<PathBuf> = HashSet::new();
         inputfiles.retain(|file| match distinfo.find_entry(file) {
             Ok(entry) => {
-                checkfiles.insert(entry.clone());
+                if seen.insert(entry.filename.clone()) {
+                    checkfiles.push((file.clone(), entry.clone()));
+                }
                 false
             }
             Err(_) => true,
@@ -161,7 +165,7 @@ impl CheckSum {
          */
         let mut checkfiles: Vec<CheckResult> = checkfiles
             .into_iter()
-            .map(|e| CheckResult { entry: e, results: vec![] })
+            .map(|(path, e)| CheckResult { path, entry: e, results: vec![] })
             .collect();
 
         let pool = build_thread_pool(self.jobs)?;
@@ -174,14 +178,11 @@ impl CheckSum {
             checkfiles.par_iter_mut().for_each(|file| {
                 match single_digest {
                     Some(digest) => {
-                        file.results = vec![
-                            file.entry
-                                .verify_checksum(&file.entry.filename, digest),
-                        ]
+                        file.results =
+                            vec![file.entry.verify_checksum(&file.path, digest)]
                     }
                     None => {
-                        file.results =
-                            file.entry.verify_checksums(&file.entry.filename)
+                        file.results = file.entry.verify_checksums(&file.path)
                     }
                 };
             });
@@ -218,7 +219,10 @@ impl CheckSum {
                         );
                         rv = 2;
                     }
-                    Err(e) => eprintln!("ERROR: {e}"),
+                    Err(e) => {
+                        eprintln!("checksum: {}: {e}", file.path.display());
+                        rv = 1;
+                    }
                 }
             }
         }

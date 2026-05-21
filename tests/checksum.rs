@@ -577,5 +577,32 @@ fn test_checksum_mismatch() -> Result<()> {
     assert_eq!(cmd.status.code(), Some(1));
     assert_eq!(cmd.stdout, "".as_bytes());
     assert_eq!(cmd.stderr, output.as_bytes());
+
+    /*
+     * Repeat the above with paths that contain a directory component, so
+     * the input path differs from the bare filename recorded in distinfo.
+     */
+    let output = "checksum: Checksum BLAKE2s mismatch for digest1.txt\n";
+    let cmd = Command::new(MKTOOL)
+        .arg("checksum")
+        .arg(&distinfo)
+        .arg("data/digest1.txt")
+        .current_dir("tests")
+        .output()?;
+    assert_eq!(cmd.status.code(), Some(1));
+    assert_eq!(cmd.stdout, "".as_bytes());
+    assert_eq!(cmd.stderr, output.as_bytes());
+
+    let output = "checksum: Checksum SHA1 mismatch for patch-Makefile\n";
+    let cmd = Command::new(MKTOOL)
+        .arg("checksum")
+        .arg("-p")
+        .arg(&distinfo)
+        .arg("data/patch-Makefile")
+        .current_dir("tests")
+        .output()?;
+    assert_eq!(cmd.status.code(), Some(1));
+    assert_eq!(cmd.stdout, "".as_bytes());
+    assert_eq!(cmd.stderr, output.as_bytes());
     Ok(())
 }
