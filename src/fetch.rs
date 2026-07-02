@@ -538,6 +538,7 @@ fn build_client() -> Result<Client, reqwest::Error> {
         .with_no_client_auth();
     Client::builder()
         .referer(false)
+        .user_agent(concat!("mktool/", env!("CARGO_PKG_VERSION")))
         .connect_timeout(*CONNECT_TIMEOUT)
         .tls_backend_preconfigured(tls_config)
         .build()
@@ -545,7 +546,11 @@ fn build_client() -> Result<Client, reqwest::Error> {
 
 #[cfg(not(feature = "webpki-roots"))]
 fn build_client() -> Result<Client, reqwest::Error> {
-    Client::builder().referer(false).connect_timeout(*CONNECT_TIMEOUT).build()
+    Client::builder()
+        .referer(false)
+        .user_agent(concat!("mktool/", env!("CARGO_PKG_VERSION")))
+        .connect_timeout(*CONNECT_TIMEOUT)
+        .build()
 }
 
 fn remove_temp(path: &Path) {
