@@ -222,6 +222,7 @@ fn test_dep_under_destdir_passes() -> Result<()> {
      */
     let install_path = "/libfoo.dylib";
     let staged = testdir.join("destdir/libfoo.dylib");
+    fs::create_dir_all(testdir.join("destdir"))?;
     fs::write(&staged, b"")?;
 
     let macho = build_macho(MH_EXECUTE, None, &[install_path]);
