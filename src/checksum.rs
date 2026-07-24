@@ -73,7 +73,7 @@ impl CheckSum {
             Err(e) => {
                 eprintln!(
                     "checksum: distinfo file {}: {e}",
-                    &self.distinfo.display()
+                    self.distinfo.display()
                 );
                 return Ok(3);
             }
