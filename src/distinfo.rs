@@ -226,7 +226,7 @@ impl DistInfo {
                         Err(e) => {
                             eprintln!(
                                 "Unable to calculate checksum for {}: {}",
-                                &entry.filepath.display(),
+                                entry.filepath.display(),
                                 e
                             );
                         }
@@ -238,7 +238,7 @@ impl DistInfo {
                         Err(e) => {
                             eprintln!(
                                 "Unable to calculate size for {}: {}",
-                                &entry.filepath.display(),
+                                entry.filepath.display(),
                                 e
                             );
                         }
