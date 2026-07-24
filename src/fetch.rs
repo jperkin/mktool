@@ -399,13 +399,13 @@ fn fetch_and_verify(
      */
     progress.inc_length(expected_size);
     if progress.is_hidden() {
-        println!("Fetching {}", &file.filename);
+        println!("Fetching {}", file.filename);
     } else {
-        progress.println(format!("{:>12} {}", "Fetching", &file.filename));
+        progress.println(format!("{:>12} {}", "Fetching", file.filename));
     }
 
     if file.sites.is_empty() {
-        eprintln!("No fetch sites available for {}", &file.filename);
+        eprintln!("No fetch sites available for {}", file.filename);
         return Err(FetchError::NotFound);
     }
 
@@ -463,7 +463,7 @@ fn fetch_and_verify(
                         eprintln!(
                             "Unable to fetch {}: {}",
                             url,
-                            &body.status()
+                            body.status()
                         );
                     });
                     continue;
