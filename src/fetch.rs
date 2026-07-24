@@ -460,11 +460,7 @@ fn fetch_and_verify(
 
                 if !&body.status().is_success() {
                     progress.suspend(|| {
-                        eprintln!(
-                            "Unable to fetch {}: {}",
-                            url,
-                            body.status()
-                        );
+                        eprintln!("Unable to fetch {}: {}", url, body.status());
                     });
                     continue;
                 }
