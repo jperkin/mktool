@@ -1,3 +1,10 @@
+## Version 1.5.10 (2026-07-24)
+
+* fetch: Specify a User-Agent, required by some sites.
+
+* Include git sha in version number when building from an untagged revision to
+  help keep track of test binaries.
+
 ## Version 1.5.9 (2026-05-21)
 
 * checksum: Fix error handling and improve compatibility with checksum.awk.
