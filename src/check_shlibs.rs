@@ -159,8 +159,7 @@ where
                 let file =
                     PathBuf::from(OsString::from_vec((line[6..pos]).to_vec()));
 
-                let Some(pkg) =
-                    line.split(|sp| (*sp as char).is_whitespace()).next_back()
+                let Some(pkg) = line.split(u8::is_ascii_whitespace).next_back()
                 else {
                     continue;
                 };
