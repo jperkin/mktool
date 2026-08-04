@@ -180,7 +180,7 @@ where
      */
     let pkgname = if let Some(entry) = state.pkgdb.get(lib.as_ref()) {
         match entry {
-            Some(p) => p.to_string(),
+            Some(p) => p.as_str(),
             None => return Ok(true),
         }
     } else {
