@@ -91,6 +91,21 @@ pub struct CheckState {
     statlibs: HashMap<PathBuf, bool>,
 }
 
+impl CheckState {
+    /*
+     * Cached stat(2) lookup, only checking the file system the first
+     * time a path is seen.
+     */
+    fn lib_exists(&mut self, path: &Path) -> bool {
+        if let Some(e) = self.statlibs.get(path) {
+            return *e;
+        }
+        let e = path.exists();
+        self.statlibs.insert(path.to_path_buf(), e);
+        e
+    }
+}
+
 /**
  * See if this library path belongs to a package.  If it does, ensure
  * that the package is a runtime dependency.

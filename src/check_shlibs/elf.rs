@@ -60,15 +60,7 @@ impl CheckShlibs {
                     Err(_) => libpath.push(rp),
                 }
                 libpath.push(lib);
-                let exists = match state.statlibs.get(&libpath) {
-                    Some(e) => *e,
-                    None => {
-                        let e = libpath.exists();
-                        state.statlibs.insert(libpath.to_path_buf(), e);
-                        e
-                    }
-                };
-                if exists {
+                if state.lib_exists(&libpath) {
                     continue 'nextlib;
                 }
             }
@@ -89,15 +81,7 @@ impl CheckShlibs {
                     None => libpath = PathBuf::from(rpath),
                 };
                 libpath.push(lib);
-                let exists = match state.statlibs.get(&libpath) {
-                    Some(e) => *e,
-                    None => {
-                        let e = libpath.exists();
-                        state.statlibs.insert(libpath.to_path_buf(), e);
-                        e
-                    }
-                };
-                if exists {
+                if state.lib_exists(&libpath) {
                     check_shlib(path, &libpath, state);
                     check_pkg(path, &libpath, state)?;
                     continue 'nextlib;
@@ -111,15 +95,7 @@ impl CheckShlibs {
             for rpath in &state.system_paths {
                 let mut libpath = PathBuf::from(rpath);
                 libpath.push(lib);
-                let exists = match state.statlibs.get(&libpath) {
-                    Some(e) => *e,
-                    None => {
-                        let e = libpath.exists();
-                        state.statlibs.insert(libpath.to_path_buf(), e);
-                        e
-                    }
-                };
-                if exists {
+                if state.lib_exists(&libpath) {
                     check_shlib(path, &libpath, state);
                     continue 'nextlib;
                 }

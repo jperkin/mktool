@@ -75,15 +75,7 @@ impl CheckShlibs {
                 Some(p) => libpath.push(p),
                 None => libpath.push(lib),
             }
-            let exists = match state.statlibs.get(&libpath) {
-                Some(e) => *e,
-                None => {
-                    let e = libpath.exists();
-                    state.statlibs.insert(libpath.to_path_buf(), e);
-                    e
-                }
-            };
-            if exists {
+            if state.lib_exists(&libpath) {
                 continue;
             }
 
@@ -91,15 +83,7 @@ impl CheckShlibs {
              * Check direct path.  If found run all checks.
              */
             let libpath = Path::new(lib);
-            let exists = match state.statlibs.get(libpath) {
-                Some(e) => *e,
-                None => {
-                    let e = libpath.exists();
-                    state.statlibs.insert(libpath.to_path_buf(), e);
-                    e
-                }
-            };
-            if exists {
+            if state.lib_exists(libpath) {
                 check_shlib(path, libpath, state);
                 check_pkg(path, libpath, state)?;
                 continue;
