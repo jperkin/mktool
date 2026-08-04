@@ -328,6 +328,37 @@ fn fetch_ftp(
 }
 
 /*
+ * Verify a downloaded temporary file against any distinfo checksums,
+ * printing the first failure.  Returns false if verification failed and
+ * the caller should try the next site.
+ */
+fn verify_temp(
+    distinfo: Option<&Distinfo>,
+    file: &FetchFile,
+    temp_name: &Path,
+    url: &str,
+    progress: &ProgressBar,
+) -> bool {
+    let Some(di) = distinfo else {
+        return true;
+    };
+    let Some(entry) = di.distfile(&file.filepath) else {
+        return true;
+    };
+    for result in
+        entry.verify_checksums(temp_name).unwrap_or_else(|e| vec![Err(e)])
+    {
+        if let Err(e) = result {
+            progress.suspend(|| {
+                eprintln!("Verification failed for {url}: {e}");
+            });
+            return false;
+        }
+    }
+    true
+}
+
+/*
  * Attempt to download a file from a list of sites, and verify against the
  * listed checksums.
  */
@@ -420,23 +451,10 @@ fn fetch_and_verify(
         if parseurl.scheme() == "ftp" {
             match fetch_ftp(&parseurl, &temp_name, progress) {
                 Ok(_) => {
-                    if let Some(di) = distinfo
-                        && let Some(entry) = di.distfile(&file.filepath)
+                    if !verify_temp(distinfo, file, &temp_name, &url, progress)
                     {
-                        for result in entry
-                            .verify_checksums(&temp_name)
-                            .unwrap_or_else(|e| vec![Err(e)])
-                        {
-                            if let Err(e) = result {
-                                progress.suspend(|| {
-                                    eprintln!(
-                                        "Verification failed for {url}: {e}"
-                                    );
-                                });
-                                remove_temp(&temp_name);
-                                continue 'nextsite;
-                            }
-                        }
+                        remove_temp(&temp_name);
+                        continue 'nextsite;
                     }
                     return rename_to_final(&temp_name, &file_name);
                 }
@@ -484,21 +502,9 @@ fn fetch_and_verify(
                     continue 'nextsite;
                 }
                 drop(tempfile);
-                if let Some(di) = distinfo
-                    && let Some(entry) = di.distfile(&file.filepath)
-                {
-                    for result in entry
-                        .verify_checksums(&temp_name)
-                        .unwrap_or_else(|e| vec![Err(e)])
-                    {
-                        if let Err(e) = result {
-                            progress.suspend(|| {
-                                eprintln!("Verification failed for {url}: {e}");
-                            });
-                            remove_temp(&temp_name);
-                            continue 'nextsite;
-                        }
-                    }
+                if !verify_temp(distinfo, file, &temp_name, &url, progress) {
+                    remove_temp(&temp_name);
+                    continue 'nextsite;
                 }
                 return rename_to_final(&temp_name, &file_name);
             }
