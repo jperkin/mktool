@@ -540,6 +540,7 @@ fn build_client() -> Result<Client, reqwest::Error> {
         .referer(false)
         .user_agent(concat!("mktool/", env!("CARGO_PKG_VERSION")))
         .connect_timeout(*CONNECT_TIMEOUT)
+        .timeout(*READ_TIMEOUT)
         .tls_backend_preconfigured(tls_config)
         .build()
 }
@@ -550,6 +551,7 @@ fn build_client() -> Result<Client, reqwest::Error> {
         .referer(false)
         .user_agent(concat!("mktool/", env!("CARGO_PKG_VERSION")))
         .connect_timeout(*CONNECT_TIMEOUT)
+        .timeout(*READ_TIMEOUT)
         .build()
 }
 
