@@ -316,6 +316,57 @@ fn fetch_ftp_read_timeout() -> Result<()> {
 }
 
 /*
+ * Verify that a stalled HTTP server triggers a read timeout and does not
+ * hang indefinitely.  The mock server advertises a Content-Length larger
+ * than the body it sends, then holds the connection open, so the client
+ * stalls waiting for body bytes that never arrive.
+ */
+#[test]
+fn fetch_http_read_timeout() -> Result<()> {
+    let port = mock_server(
+        b"HTTP/1.1 200 OK\r\nContent-Length: 1000\r\n\r\npartial",
+        true,
+    )?;
+
+    let dir = tempfile::tempdir()?;
+    let distdir = dir.path().to_str().ok_or("invalid tempdir path")?;
+    let input =
+        format!("test.txt {distdir} -http://127.0.0.1:{port}/test.txt\n");
+
+    let start = Instant::now();
+
+    let mut child = Command::new(MKTOOL)
+        .args(["fetch", "-d", distdir, "-I", "-"])
+        .env("MKTOOL_JOBS", "1")
+        .env("MKTOOL_READ_TIMEOUT", "2")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+
+    let mut stdin = child.stdin.take().ok_or("failed to open stdin")?;
+    stdin.write_all(input.as_bytes())?;
+    drop(stdin);
+
+    let output = child.wait_with_output()?;
+    let elapsed = start.elapsed();
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert!(!output.status.success(), "fetch should have failed: {stderr}");
+    assert!(
+        elapsed.as_secs() < 30,
+        "read timeout did not fire, took {elapsed:?}"
+    );
+    assert!(
+        !dir.path().join("test.txt").exists(),
+        "no file should have been created"
+    );
+    assert!(!has_temp_files(dir.path())?, "temp file not cleaned up");
+    Ok(())
+}
+
+/*
  * Verify that invalid input (too few fields) is handled gracefully.
  */
 #[test]
