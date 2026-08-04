@@ -284,19 +284,23 @@ where
     rv
 }
 
+/*
+ * Fetch a mandatory environment variable, exiting if unset.
+ */
+fn required_env(name: &str) -> String {
+    std::env::var(name).unwrap_or_else(|_| {
+        eprintln!("{name} is mandatory");
+        std::process::exit(1);
+    })
+}
+
 impl CheckShlibs {
     pub fn run(&self) -> anyhow::Result<i32> {
         /*
          * First verify that we have all the required environment variables
          * set, and perform initial configuration of them.
          */
-        let destdir = match std::env::var("DESTDIR") {
-            Ok(s) => PathBuf::from(s),
-            Err(_) => {
-                eprintln!("DESTDIR is mandatory");
-                std::process::exit(1);
-            }
-        };
+        let destdir = PathBuf::from(required_env("DESTDIR"));
         let cross_destdir = match std::env::var("CROSS_DESTDIR") {
             Ok(s) => {
                 if s.is_empty() {
@@ -310,55 +314,28 @@ impl CheckShlibs {
                 std::process::exit(1);
             }
         };
-        let wrkdir = match std::env::var("WRKDIR") {
-            Ok(s) => PathBuf::from(s),
-            Err(_) => {
-                eprintln!("WRKDIR is mandatory");
+        let wrkdir = PathBuf::from(required_env("WRKDIR"));
+        let s = required_env("PKG_ADMIN_CMD");
+        let mut words = s.split_whitespace();
+        let Some(first) = words.next() else {
+            eprintln!("Malformed PKG_ADMIN_CMD {s}");
+            std::process::exit(1);
+        };
+        let pkg_admin_cmd = PathBuf::from(first);
+        let pkg_admin_args: Vec<String> = words.map(String::from).collect();
+        let f = fs::read_to_string(required_env("DEPENDS_FILE"))?;
+        let mut depends = vec![];
+        for line in f.lines() {
+            let fields: Vec<_> = line.split_whitespace().collect();
+            if fields.len() != 3 {
+                eprintln!("Bad DEPENDS_FILE input?");
                 std::process::exit(1);
             }
-        };
-        let pkg_admin_cmd: PathBuf;
-        let mut pkg_admin_args = vec![];
-        match std::env::var("PKG_ADMIN_CMD") {
-            Ok(s) => {
-                let v: Vec<_> = s.split_whitespace().collect();
-                if let Some((first, args)) = v.split_first() {
-                    pkg_admin_cmd = PathBuf::from(first);
-                    for arg in args {
-                        pkg_admin_args.push(arg.to_string());
-                    }
-                } else {
-                    eprintln!("Malformed PKG_ADMIN_CMD {s}");
-                    std::process::exit(1);
-                }
-            }
-            Err(_) => {
-                eprintln!("PKG_ADMIN_CMD is mandatory");
-                std::process::exit(1);
-            }
-        };
-        let depends = match std::env::var("DEPENDS_FILE") {
-            Ok(s) => {
-                let mut deps = vec![];
-                let f = fs::read_to_string(s)?;
-                for line in f.lines() {
-                    let fields: Vec<_> = line.split_whitespace().collect();
-                    if fields.len() != 3 {
-                        eprintln!("Bad DEPENDS_FILE input?");
-                        std::process::exit(1);
-                    }
-                    let deptype = fields[0].to_string();
-                    let pkgmatch = fields[1].to_string();
-                    let pkg = fields[2].to_string();
-                    deps.push((deptype, pkgmatch, pkg))
-                }
-                deps
-            }
-            Err(_) => {
-                eprintln!("DEPENDS_FILE is mandatory");
-                std::process::exit(1);
-            }
-        };
+            let deptype = fields[0].to_string();
+            let pkgmatch = fields[1].to_string();
+            let pkg = fields[2].to_string();
+            depends.push((deptype, pkgmatch, pkg))
+        }
 
         /*
          * These environment variables are optional.
