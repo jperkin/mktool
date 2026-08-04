@@ -16,7 +16,7 @@
 
 use crate::build_thread_pool;
 use clap::Args;
-use pkgsrc::digest::Digest;
+use pkgsrc::digest::{Digest, DigestError};
 use pkgsrc::distinfo::{Checksum, Distinfo, Entry, EntryType};
 use rayon::prelude::*;
 use std::collections::HashSet;
@@ -219,21 +219,8 @@ impl DistInfo {
             entries.par_iter_mut().for_each(|entry| {
                 let filename = entry.filename().to_path_buf();
                 let filepath = entry.filepath().to_path_buf();
-                let mut checksums: Vec<Checksum> = vec![];
-                for c in entry.checksums() {
-                    let mut hash = String::new();
-                    match Distinfo::calculate_checksum(&filepath, c.digest) {
-                        Ok(h) => hash = h,
-                        Err(e) => {
-                            eprintln!(
-                                "Unable to calculate checksum for {}: {}",
-                                filepath.display(),
-                                e
-                            );
-                        }
-                    };
-                    checksums.push(Checksum::new(c.digest, hash));
-                }
+                let digests: Vec<Digest> =
+                    entry.checksums().iter().map(|c| c.digest).collect();
                 let mut size = None;
                 if entry.filetype() == EntryType::Distfile {
                     match Distinfo::calculate_size(&filepath) {
@@ -247,6 +234,39 @@ impl DistInfo {
                         }
                     };
                 }
+                /*
+                 * Read the file once, calculating all digests in a single
+                 * pass.  On failure print an error and leave the hashes
+                 * empty.
+                 */
+                let mut hashes = vec![String::new(); digests.len()];
+                if !digests.is_empty() {
+                    let result = fs::File::open(&filepath)
+                        .map_err(DigestError::from)
+                        .and_then(|mut f| match entry.filetype() {
+                            EntryType::Distfile => {
+                                Digest::multi_hash_file(&mut f, &digests)
+                            }
+                            EntryType::Patchfile => {
+                                Digest::multi_hash_patch(&mut f, &digests)
+                            }
+                        });
+                    match result {
+                        Ok(h) => hashes = h,
+                        Err(e) => {
+                            eprintln!(
+                                "Unable to calculate checksum for {}: {}",
+                                filepath.display(),
+                                e
+                            );
+                        }
+                    }
+                }
+                let checksums = digests
+                    .into_iter()
+                    .zip(hashes)
+                    .map(|(digest, hash)| Checksum::new(digest, hash))
+                    .collect();
                 *entry = Entry::new(filename, filepath, checksums, size);
             });
         });
