@@ -18,6 +18,10 @@ use crate::check_shlibs::{CheckShlibs, CheckState};
 use crate::check_shlibs::{check_pkg, check_shlib};
 use goblin::mach::{Mach, SingleArch};
 use std::path::Path;
+use std::sync::LazyLock;
+
+static SKIP_SYSTEM_LIBS: LazyLock<bool> =
+    LazyLock::new(|| std::env::var("SKIP_SYSTEM_LIBS").is_ok());
 
 impl CheckShlibs {
     pub fn check_dso(
@@ -58,7 +62,7 @@ impl CheckShlibs {
              * longer ship the actual file system entries (because lol) so any
              * existence test later on will fail.
              */
-            if std::env::var("SKIP_SYSTEM_LIBS").is_ok()
+            if *SKIP_SYSTEM_LIBS
                 && (lib.starts_with("/System/Library")
                     || lib.starts_with("/usr/lib"))
             {
