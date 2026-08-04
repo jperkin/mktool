@@ -145,14 +145,14 @@ impl CheckSum {
          */
         let mut checkfiles: Vec<(PathBuf, Entry)> = vec![];
         let mut seen: HashSet<PathBuf> = HashSet::new();
-        inputfiles.retain(|lookup, orig| match distinfo.find_entry(lookup) {
-            Ok(entry) => {
-                if seen.insert(entry.filename.clone()) {
+        inputfiles.retain(|lookup, orig| match distinfo.find(lookup) {
+            Some(entry) => {
+                if seen.insert(entry.filename().to_path_buf()) {
                     checkfiles.push((orig.clone(), entry.clone()));
                 }
                 false
             }
-            Err(_) => true,
+            None => true,
         });
 
         /*
@@ -185,7 +185,10 @@ impl CheckSum {
                             vec![file.entry.verify_checksum(&file.path, digest)]
                     }
                     None => {
-                        file.results = file.entry.verify_checksums(&file.path)
+                        file.results = file
+                            .entry
+                            .verify_checksums(&file.path)
+                            .unwrap_or_else(|e| vec![Err(e)])
                     }
                 };
             });
@@ -195,7 +198,7 @@ impl CheckSum {
          * We have processed everything, print results and return compatible
          * exit status.  Output and order should match checksum.awk.
          */
-        checkfiles.sort_by(|a, b| a.entry.filename.cmp(&b.entry.filename));
+        checkfiles.sort_by(|a, b| a.entry.filename().cmp(b.entry.filename()));
         let mut rv = 0;
         for file in checkfiles {
             for result in file.results {
@@ -203,7 +206,7 @@ impl CheckSum {
                     Ok(digest) => println!(
                         "=> Checksum {} OK for {}",
                         digest,
-                        file.entry.filename.display()
+                        file.entry.filename().display()
                     ),
                     Err(DistinfoError::Checksum(path, digest, _, _)) => {
                         eprintln!(
@@ -218,7 +221,7 @@ impl CheckSum {
                         eprintln!(
                             "checksum: No {} checksum recorded for {}",
                             digest,
-                            file.entry.filename.display()
+                            file.entry.filename().display()
                         );
                         rv = 2;
                     }

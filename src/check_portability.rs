@@ -50,10 +50,10 @@ fn check_random(line: &str) -> bool {
          * $RANDOMIZE is considered acceptable, but only if there is no bare
          * $RANDOM elsewhere on the line, so continue to other matches.
          */
-        if let Some(&b) = bytes.get(next) {
-            if b.is_ascii_uppercase() || b == b'_' {
-                continue;
-            }
+        if let Some(&b) = bytes.get(next)
+            && (b.is_ascii_uppercase() || b == b'_')
+        {
+            continue;
         }
 
         /*
@@ -250,10 +250,9 @@ impl Cmd {
              */
             if let Some(p) =
                 entry.file_name().to_string_lossy().strip_suffix(".in")
+                && patched.contains(p)
             {
-                if patched.contains(p) {
-                    continue 'nextfile;
-                }
+                continue 'nextfile;
             }
 
             let path = entry.path();

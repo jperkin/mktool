@@ -39,10 +39,10 @@ impl Symlinks {
              * Create any parent directories required as part of the
              * target.
              */
-            if let Some(dir) = link.parent() {
-                if dir.as_os_str() != "" {
-                    fs::create_dir_all(dir)?;
-                }
+            if let Some(dir) = link.parent()
+                && dir.as_os_str() != ""
+            {
+                fs::create_dir_all(dir)?;
             }
             /*
              * Ignore errors, just try to remove the destination (we are

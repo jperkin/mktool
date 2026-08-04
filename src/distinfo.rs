@@ -175,7 +175,7 @@ impl DistInfo {
         entries.extend(
             self.patchfiles
                 .iter()
-                .filter(|p| p.exists() && Entry::is_patch_filename(p))
+                .filter(|p| p.exists() && EntryType::is_patch_filename(p))
                 .filter_map(|path| {
                     path.file_name().map(|f| {
                         Entry::new(
@@ -207,7 +207,7 @@ impl DistInfo {
          * Order all of the input files alphabetically.  Distfiles and
          * patchfiles are separated in the final output by Distinfo.
          */
-        entries.sort_by(|a, b| a.filepath.cmp(&b.filepath));
+        entries.sort_by(|a, b| a.filepath().cmp(b.filepath()));
 
         let pool = build_thread_pool(self.jobs)?;
 
@@ -217,33 +217,37 @@ impl DistInfo {
          */
         pool.install(|| {
             entries.par_iter_mut().for_each(|entry| {
-                for c in entry.checksums.iter_mut() {
-                    match Distinfo::calculate_checksum(
-                        &entry.filepath,
-                        c.digest,
-                    ) {
-                        Ok(h) => c.hash = h,
+                let filename = entry.filename().to_path_buf();
+                let filepath = entry.filepath().to_path_buf();
+                let mut checksums: Vec<Checksum> = vec![];
+                for c in entry.checksums() {
+                    let mut hash = String::new();
+                    match Distinfo::calculate_checksum(&filepath, c.digest) {
+                        Ok(h) => hash = h,
                         Err(e) => {
                             eprintln!(
                                 "Unable to calculate checksum for {}: {}",
-                                entry.filepath.display(),
+                                filepath.display(),
                                 e
                             );
                         }
                     };
+                    checksums.push(Checksum::new(c.digest, hash));
                 }
-                if entry.filetype == EntryType::Distfile {
-                    match Distinfo::calculate_size(&entry.filepath) {
-                        Ok(s) => entry.size = Some(s),
+                let mut size = None;
+                if entry.filetype() == EntryType::Distfile {
+                    match Distinfo::calculate_size(&filepath) {
+                        Ok(s) => size = Some(s),
                         Err(e) => {
                             eprintln!(
                                 "Unable to calculate size for {}: {}",
-                                entry.filepath.display(),
+                                filepath.display(),
                                 e
                             );
                         }
                     };
                 }
+                *entry = Entry::new(filename, filepath, checksums, size);
             });
         });
 
@@ -265,7 +269,7 @@ impl DistInfo {
          * "makepatchsum" operates, by just operating on patch files and
          * keeping any file entries.
          */
-        if di_new.distfiles().is_empty() {
+        if di_new.distfiles().next().is_none() {
             for distfile in di_cur.distfiles() {
                 di_new.insert(distfile.clone());
             }
@@ -286,7 +290,7 @@ impl DistInfo {
         /*
          * Write resulting distinfo file to stdout.
          */
-        let new_bytes = di_new.as_bytes();
+        let new_bytes = di_new.to_bytes();
         let mut stdout = io::stdout().lock();
         stdout.write_all(&new_bytes)?;
         stdout.flush()?;
@@ -298,7 +302,7 @@ impl DistInfo {
         if noinputfiles {
             Ok(1)
         } else {
-            Ok(i32::from(di_cur.as_bytes() != new_bytes))
+            Ok(i32::from(di_cur.to_bytes() != new_bytes))
         }
     }
 }

@@ -385,7 +385,7 @@ fn fetch_and_verify(
      */
     let expected_size = if let Some(di) = distinfo {
         match di.distfile(&file.filepath) {
-            Some(e) => e.size.unwrap_or(0),
+            Some(e) => e.size().unwrap_or(0),
             None => 0,
         }
     } else {
@@ -420,18 +420,21 @@ fn fetch_and_verify(
         if parseurl.scheme() == "ftp" {
             match fetch_ftp(&parseurl, &temp_name, progress) {
                 Ok(_) => {
-                    if let Some(di) = distinfo {
-                        if let Some(entry) = di.distfile(&file.filepath) {
-                            for result in entry.verify_checksums(&temp_name) {
-                                if let Err(e) = result {
-                                    progress.suspend(|| {
-                                        eprintln!(
-                                            "Verification failed for {url}: {e}"
-                                        );
-                                    });
-                                    remove_temp(&temp_name);
-                                    continue 'nextsite;
-                                }
+                    if let Some(di) = distinfo
+                        && let Some(entry) = di.distfile(&file.filepath)
+                    {
+                        for result in entry
+                            .verify_checksums(&temp_name)
+                            .unwrap_or_else(|e| vec![Err(e)])
+                        {
+                            if let Err(e) = result {
+                                progress.suspend(|| {
+                                    eprintln!(
+                                        "Verification failed for {url}: {e}"
+                                    );
+                                });
+                                remove_temp(&temp_name);
+                                continue 'nextsite;
                             }
                         }
                     }
@@ -452,10 +455,10 @@ fn fetch_and_verify(
                  * If we don't have an expected size from distinfo then update
                  * the progress bar with the content length, if available.
                  */
-                if expected_size == 0 {
-                    if let Some(len) = body.content_length() {
-                        progress.inc_length(len);
-                    }
+                if expected_size == 0
+                    && let Some(len) = body.content_length()
+                {
+                    progress.inc_length(len);
                 }
 
                 if !&body.status().is_success() {
@@ -481,18 +484,19 @@ fn fetch_and_verify(
                     continue 'nextsite;
                 }
                 drop(tempfile);
-                if let Some(di) = distinfo {
-                    if let Some(entry) = di.distfile(&file.filepath) {
-                        for result in entry.verify_checksums(&temp_name) {
-                            if let Err(e) = result {
-                                progress.suspend(|| {
-                                    eprintln!(
-                                        "Verification failed for {url}: {e}"
-                                    );
-                                });
-                                remove_temp(&temp_name);
-                                continue 'nextsite;
-                            }
+                if let Some(di) = distinfo
+                    && let Some(entry) = di.distfile(&file.filepath)
+                {
+                    for result in entry
+                        .verify_checksums(&temp_name)
+                        .unwrap_or_else(|e| vec![Err(e)])
+                    {
+                        if let Err(e) = result {
+                            progress.suspend(|| {
+                                eprintln!("Verification failed for {url}: {e}");
+                            });
+                            remove_temp(&temp_name);
+                            continue 'nextsite;
                         }
                     }
                 }
@@ -550,10 +554,10 @@ fn build_client() -> Result<Client, reqwest::Error> {
 }
 
 fn remove_temp(path: &Path) {
-    if let Err(e) = fs::remove_file(path) {
-        if e.kind() != io::ErrorKind::NotFound {
-            eprintln!("Failed to remove {}: {e}", path.display());
-        }
+    if let Err(e) = fs::remove_file(path)
+        && e.kind() != io::ErrorKind::NotFound
+    {
+        eprintln!("Failed to remove {}: {e}", path.display());
     }
 }
 
