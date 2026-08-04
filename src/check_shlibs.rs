@@ -370,7 +370,7 @@ impl CheckShlibs {
                 Some(p) => p.clone(),
                 None => PathBuf::new(),
             };
-            for p in paths.split(':').collect::<Vec<&str>>() {
+            for p in paths.split(':') {
                 let mut path = cross_prefix.clone();
                 path.push(p);
                 system_paths.push(path);
@@ -379,8 +379,7 @@ impl CheckShlibs {
         let toxic = match std::env::var("CHECK_SHLIBS_TOXIC") {
             Ok(s) => {
                 let mut v = vec![];
-                let rgxs: Vec<_> = s.split_whitespace().collect();
-                for r in rgxs {
+                for r in s.split_whitespace() {
                     let rgx = Regex::new(r).with_context(|| {
                         format!("invalid CHECK_SHLIBS_TOXIC regex: {r}")
                     })?;
@@ -393,14 +392,7 @@ impl CheckShlibs {
             }
         };
         let wrkref = match std::env::var("CHECK_WRKREF_EXTRA_DIRS") {
-            Ok(s) => {
-                let mut v = vec![];
-                let dirs: Vec<_> = s.split_whitespace().collect();
-                for d in dirs {
-                    v.push(PathBuf::from(d));
-                }
-                v
-            }
+            Ok(s) => s.split_whitespace().map(PathBuf::from).collect(),
             Err(_) => {
                 vec![]
             }

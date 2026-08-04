@@ -127,7 +127,7 @@ impl Cmd {
          */
         let mut skipglob = vec![];
         if let Ok(paths) = std::env::var("CHECK_PORTABILITY_SKIP") {
-            for p in paths.split_whitespace().collect::<Vec<&str>>() {
+            for p in paths.split_whitespace() {
                 match glob::Pattern::new(p) {
                     Ok(g) => skipglob.push(g),
                     Err(e) => {
