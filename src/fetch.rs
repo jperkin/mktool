@@ -84,7 +84,7 @@ pub struct Fetch {
     jobs: Option<usize>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 struct FetchFile {
     filepath: PathBuf,
     filename: String,
