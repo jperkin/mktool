@@ -20,7 +20,7 @@ use pkgsrc::digest::Digest;
 use rayon::prelude::*;
 use std::fs;
 use std::io;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 #[derive(Args, Debug)]
@@ -38,8 +38,8 @@ pub struct DigestCmd {
     files: Option<Vec<PathBuf>>,
 }
 
-struct DigestResult {
-    path: PathBuf,
+struct DigestResult<'a> {
+    path: &'a Path,
     hash: Option<String>,
     error: String,
 }
@@ -68,7 +68,7 @@ impl DigestCmd {
         let mut hashfiles: Vec<DigestResult> = files
             .iter()
             .map(|f| DigestResult {
-                path: f.to_path_buf(),
+                path: f.as_path(),
                 hash: None,
                 error: String::new(),
             })
@@ -76,7 +76,7 @@ impl DigestCmd {
 
         pool.install(|| {
             hashfiles.par_iter_mut().for_each(|file| {
-                match fs::File::open(&file.path) {
+                match fs::File::open(file.path) {
                     Ok(mut f) => match algorithm.hash_file(&mut f) {
                         Ok(h) => file.hash = Some(h),
                         Err(e) => file.error = e.to_string(),
