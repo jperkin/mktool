@@ -68,15 +68,19 @@ fn check_random(line: &str) -> bool {
 }
 
 fn check_test_eq(line: &str) -> bool {
-    let words: Vec<_> = line.split_whitespace().collect();
-    let mut idx = 2;
-    while idx < words.len() {
-        if words[idx] == "=="
-            && (words[idx - 2] == "test" || words[idx - 2] == "[")
-        {
+    /*
+     * Look for "==" where the word two before it is "test" or "[",
+     * tracking the previous two words rather than collecting the line
+     * into a Vec.
+     */
+    let mut prev2 = "";
+    let mut prev1 = "";
+    for word in line.split_whitespace() {
+        if word == "==" && (prev2 == "test" || prev2 == "[") {
             return true;
         }
-        idx += 1;
+        prev2 = prev1;
+        prev1 = word;
     }
     false
 }
