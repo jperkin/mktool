@@ -14,8 +14,6 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-extern crate glob;
-
 use crate::scrub_ctrl;
 use clap::Args;
 use std::collections::HashSet;
