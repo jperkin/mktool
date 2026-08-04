@@ -15,7 +15,7 @@
  */
 
 use crate::check_shlibs::{CheckShlibs, CheckState};
-use crate::check_shlibs::{check_pkg, check_shlib};
+use crate::check_shlibs::{check_pkg, check_shlib, lib_exists};
 use goblin::mach::{Mach, SingleArch};
 use std::path::Path;
 use std::sync::LazyLock;
@@ -79,7 +79,7 @@ impl CheckShlibs {
                 Some(p) => libpath.push(p),
                 None => libpath.push(lib),
             }
-            if state.lib_exists(&libpath) {
+            if lib_exists(&mut state.statlibs, &libpath) {
                 continue;
             }
 
@@ -87,7 +87,7 @@ impl CheckShlibs {
              * Check direct path.  If found run all checks.
              */
             let libpath = Path::new(lib);
-            if state.lib_exists(libpath) {
+            if lib_exists(&mut state.statlibs, libpath) {
                 check_shlib(path, libpath, state);
                 check_pkg(path, libpath, state)?;
                 continue;

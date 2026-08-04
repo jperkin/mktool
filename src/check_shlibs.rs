@@ -91,19 +91,19 @@ pub struct CheckState {
     statlibs: HashMap<PathBuf, bool>,
 }
 
-impl CheckState {
-    /*
-     * Cached stat(2) lookup, only checking the file system the first
-     * time a path is seen.
-     */
-    fn lib_exists(&mut self, path: &Path) -> bool {
-        if let Some(e) = self.statlibs.get(path) {
-            return *e;
-        }
-        let e = path.exists();
-        self.statlibs.insert(path.to_path_buf(), e);
-        e
+/*
+ * Cached stat(2) lookup, only checking the file system the first time a
+ * path is seen.  A free function taking just the cache, rather than a
+ * method on CheckState, so that callers iterating over other CheckState
+ * fields can still call it.
+ */
+fn lib_exists(statlibs: &mut HashMap<PathBuf, bool>, path: &Path) -> bool {
+    if let Some(e) = statlibs.get(path) {
+        return *e;
     }
+    let e = path.exists();
+    statlibs.insert(path.to_path_buf(), e);
+    e
 }
 
 /**

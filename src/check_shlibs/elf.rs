@@ -15,7 +15,7 @@
  */
 
 use crate::check_shlibs::{CheckShlibs, CheckState};
-use crate::check_shlibs::{check_pkg, check_shlib};
+use crate::check_shlibs::{check_pkg, check_shlib, lib_exists};
 use goblin::elf::Elf;
 use std::path::{Path, PathBuf};
 
@@ -60,7 +60,7 @@ impl CheckShlibs {
                     Err(_) => libpath.push(rp),
                 }
                 libpath.push(lib);
-                if state.lib_exists(&libpath) {
+                if lib_exists(&mut state.statlibs, &libpath) {
                     continue 'nextlib;
                 }
             }
@@ -81,7 +81,7 @@ impl CheckShlibs {
                     None => libpath = PathBuf::from(rpath),
                 };
                 libpath.push(lib);
-                if state.lib_exists(&libpath) {
+                if lib_exists(&mut state.statlibs, &libpath) {
                     check_shlib(path, &libpath, state);
                     check_pkg(path, &libpath, state)?;
                     continue 'nextlib;
@@ -95,7 +95,7 @@ impl CheckShlibs {
             for rpath in &state.system_paths {
                 let mut libpath = PathBuf::from(rpath);
                 libpath.push(lib);
-                if state.lib_exists(&libpath) {
+                if lib_exists(&mut state.statlibs, &libpath) {
                     check_shlib(path, &libpath, state);
                     continue 'nextlib;
                 }
