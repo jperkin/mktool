@@ -81,7 +81,7 @@ first person to reject any move towards a non-portable pkgsrc.
 
 ### What Is The Minimum Support Rust Version?
 
-Currently [1.86.0](https://blog.rust-lang.org/2025/04/03/Rust-1.86.0/).
+Currently [1.88.0](https://blog.rust-lang.org/2025/06/26/Rust-1.88.0/).
 
 As this is an end-user application and not a library, the MSRV may be bumped a
 little sooner than it would for e.g.
