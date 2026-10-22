@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024 Jonathan Perkin <jonathan@perkin.org.uk>
+ * Copyright (c) 2026 Jonathan Perkin <jonathan@perkin.org.uk>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -18,7 +18,7 @@ use crate::scrub_ctrl;
 use clap::Args;
 use std::collections::HashSet;
 use std::fs;
-use std::io::{BufRead, BufReader, Read};
+use std::io::{BufRead, BufReader};
 use walkdir::WalkDir;
 
 #[derive(Args, Debug)]
@@ -215,8 +215,10 @@ impl Cmd {
                 }
                 let pfile = fs::File::open(patch.path())?;
                 let reader = BufReader::new(pfile);
-                for line in reader.lines() {
+                for line in reader.split(b'\n') {
                     let line = line?;
+                    let line = String::from_utf8_lossy(&line);
+                    let line = line.strip_suffix('\r').unwrap_or(&line);
                     if line.starts_with("+++") {
                         let v: Vec<&str> =
                             line.splitn(2, char::is_whitespace).collect();
@@ -263,10 +265,7 @@ impl Cmd {
              * Remove leading "./" from walkdir path entries as all
              * CHECK_PORTABILITY_SKIP matches are relative to WRKDIR.
              */
-            let mpath = match path.strip_prefix("./") {
-                Ok(p) => p,
-                Err(_) => path,
-            };
+            let mpath = path.strip_prefix("./").unwrap_or(path);
             for g in &skipglob {
                 if g.matches_path(mpath) {
                     continue 'nextfile;
@@ -306,14 +305,9 @@ impl Cmd {
                 continue 'nextfile;
             }
 
-            for (i, line) in reader.by_ref().lines().enumerate() {
-                /*
-                 * Silently skip any non-UTF-8 lines; the hashbang gate
-                 * already filters out binary files in practice.
-                 */
-                let Ok(line) = line else {
-                    continue;
-                };
+            for (i, line) in reader.split(b'\n').enumerate() {
+                let line = line?;
+                let line = String::from_utf8_lossy(&line);
                 /*
                  * Remove all leading and trailing whitespace to simplify
                  * matches, and ignore comments.
@@ -385,14 +379,6 @@ mod tests {
         assert!(!check_random("$RANDOMIZE"));
         assert!(!check_random("$RANDOM_ISH"));
         assert!(check_random("$RANDOMIZE $RANDOM"));
-
-        /*
-         * Commented matches are fine.  Unfortunately we strip commented
-         * lines prior to calling check_random() currently, so this should
-         * go into an integration test.
-         */
-        //assert_eq!(check_random("# $RANDOM"), false);
-        //assert_eq!(check_random("   # $RANDOM"), false);
 
         /*
          * Misc non-matches.
