@@ -322,7 +322,7 @@ fn fetch_ftp(
     let mut ftpfile = ftp.retr_as_stream(path)?;
     let file = File::create(filename)?;
     std::io::copy(&mut ftpfile, &mut progress.wrap_write(&file))?;
-    ftp.finalize_retr_stream(ftpfile)?;
+    ftpfile.finish()?;
     ftp.quit()?;
     Ok(file.metadata()?.len())
 }
