@@ -1,3 +1,16 @@
+## Version 1.5.11 (2026-10-22)
+
+* Cargo: Upgrade all dependencies, including webpki certificate updates.  The
+  minimum supported Rust version is now 1.88.
+
+* check-portability: Handle non-UTF8 input without skipping shell checks or
+  failing to read patch files, and improve performance.
+
+* fetch: Honour `MKTOOL_READ_TIMEOUT` for HTTP downloads.
+
+* distinfo: Calculate all checksums in a single pass over each file, improving
+  performance of distinfo generation for www/grafana by another 33%.
+
 ## Version 1.5.10 (2026-07-24)
 
 * fetch: Specify a User-Agent, required by some sites.
